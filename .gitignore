@@ -1,0 +1,15 @@
+# Secrets
+.env
+
+# Python junk
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
