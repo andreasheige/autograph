@@ -2,18 +2,6 @@
 
 **Transform the noise of Git commits into a structured, human-readable daily chronicle within your Obsidian Vault.**
 
-[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](httpshttps://www.python.org/downloads/)
-[![Ollama](https://img.shields.io/badge/LLM-Ollama-orange.svg)](https://ollama.com/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-
-Autograph is a modular, agentic system designed to bridge the gap between your development workflow and your
-
-
-
-# 🎭 Autograph
-
-**Transform the noise of Git commits into a structured, human-readable daily chronicle within your Obsidian Vault.**
-
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![Ollama](https://img.shields.io/badge/LLM-Ollama-orange.svg)](https://ollama.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -36,10 +24,15 @@ Autograph is a modular, agentic system designed to bridge the gap between your d
 
 Autograph is built with a modular, "Agentic" architecture:
 
-* `src/core/`: The engine. Contains the `VaultManager` (Obsintidian interaction) and `Synthesizer` (Ollama interface).
+* `src/core/`: The engine. Contains the `VaultManager` (Obsidian interaction) and `Synthesizer` (Ollama interface).
 * `src/agents/`: The brains. Specialized agents like the `Backfiller` and `Summary` agent.
 * `config/`: The configuration layer. Environment-driven and identity-blind.
 * `infrastructure/`: The deployment layer. Contains setup scripts and automation (e.g., `launchd` templates).
+
+### 📂 The Two-Repo Strategy
+Autograph operates using a clean separation between the **Engine** and the **Memory**:
+* **The Engine (Code):** The logic, agents, and automation residing in your development repository.
+* **The Memory (Vault):** Your Obsidian vault, acting as a version-on-controlled, structured knowledge base.
 
 ---
 
