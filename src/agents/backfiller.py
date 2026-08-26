@@ -21,14 +21,14 @@ class AutographBackfillerAgent:
         for git_root in git_roots:
             print(f"\n🚀 Processing Repository: {git_root.name}")
             
-            git_cmd = [
+            git_log_cmd = [
                 "git", "-C", str(git_root), 
                 "log", f"--since={days} days ago", 
-                "--pretty=format:%ad | %an | %s"
+                "--pretty=format:%H|%ad|%an|%s"
             ]
             
             try:
-                result = subprocess.run(git_cmd, capture_output=True, text=True, check=True)
+                result = subprocess.run(git_log_cmd, capture_output=True, text=True, check=True)
                 logs = result.stdout.strip().split('\n')
                 
                 if not logs or (len(logs) == 1 and logs[0] == ''):
@@ -39,22 +39,15 @@ class AutographBackfillerAgent:
 
                 for line in logs:
                     if not line: continue
-                    parts = line.split(" | ")
-                    if len(parts) < 3: continue
+                    parts = line.split("|")
+                    if len(parts) < 4: continue
                     
-                    date_str, author, message = parts[0], parts[1], parts[2]
-                    event_text = f"[{date_str}] {author} committed: {message}"
+                    commit_hash, date_str, author, message = parts[0], parts[1], parts[2], parts[3]
                     
-                    print(f"    Processing: {message}")
-                    
-                    try:
-                        knowledge_json_str = self.synthesizer.synthesize(event_text)
-                        knowledge_data = json.loads(knowledge_json_str)
-                        self.vault_manager.write_event(git_root.name, event_text, knowledge_data)
-                    except Exception as e:
-                        print(f"      Error during synthesis: {e}")
-
-                print(f"  ✅ Done with {git_root.name}")
+                    # Step 2: Get the files changed in THIS commit
+                    git_show_cmd = ["git", "-C", str(git_root), "show", "--name-only", "--format=", commit_hash]
+                    files_result = subprocess.run(git_show_cmd, capture_output=..
+            # Wait, I'm making the same mistake. I'll just rewrite the whole file properly with absolute paths.
 
             except subprocess.CalledProcessError as e:
                 print(f"  ❌ Error reading git logs for {git_root.name}: {e.stderr}")
