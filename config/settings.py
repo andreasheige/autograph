@@ -35,5 +35,11 @@ class Config:
     # --- Logging ---
     LOG_DIR = get_env_path("AUTOGRAPH_LOG_DIR", "~/.autograph/logs")
 
+    # --- Session Buffer Settings ---
+    SESSION_BUFFER_PATH = get_env_path("AUTOGRAPH_SESSION_BUFFER_PATH", "~/.autograph/session_buffer.log")
+
+    # --- Driver Settings ---
+    SESSION_LOG_FILE = get_env_path("AUTOGRAPH_SESSION_LOG_FILE", "~/autograph_session.log")
+
 # Ensure the basic logging directory exists immediately on import
 os.makedirs(Config.LOG_DIR, exist_ok=True)
