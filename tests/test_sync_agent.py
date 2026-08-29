@@ -21,6 +21,8 @@ def test_sync_stages_only_markdown_then_commits_and_pushes(tmp_path):
     add_command = run.call_args_list[1].args[0]
     assert add_command[-1] == ":(glob)**/*.md"
     assert "--all" in add_command
+    commit_command = run.call_args_list[3].args[0]
+    assert commit_command[-1].startswith("chore(vault): sync Markdown")
     assert run.call_args_list[4].args[0][-1] == "push"
 
 
