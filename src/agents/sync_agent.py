@@ -58,7 +58,7 @@ class AutographSyncAgent:
                 )
 
             commit_msg = (
-                "Autograph: sync Markdown "
+                "chore(vault): sync Markdown "
                 f"({datetime.now().astimezone().isoformat(timespec='seconds')})"
             )
             subprocess.run(
