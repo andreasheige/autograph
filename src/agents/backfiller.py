@@ -1,6 +1,7 @@
 import subprocess
 import json
 from config.settings import Config
+from src.agents.sync_agent import AutographSyncAgent
 from src.core.synthesizer import Synthesizer
 from src.core.vault import VaultManager
 
@@ -8,6 +9,7 @@ class AutographBackfillerAgent:
     def __init__(self):
         self.vault_manager = VaultManager()
         self.synthesizer = Synthesizer()
+        self.sync_agent = AutographSyncAgent(self.vault_manager.vault_root)
 
     def run(self, search_dir, days=7):
         git_roots = self.vault_manager.find_all_git_roots(search_dir)
@@ -18,6 +20,7 @@ class AutographBackfillerAgent:
 
         print(f"\n✅ Total repositories identified: {len(git_roots)}")
 
+        created_events = 0
         for git_root in git_roots:
             print(f"\n🚀 Processing Repository: {git_root.name}")
             
@@ -60,6 +63,7 @@ class AutographBackfillerAgent:
                     try:
                         knowledge_data = json.loads(self.synthesizer.synthesize(event_text))
                         self.vault_manager.write_event(git_root.name, event_text, knowledge_data)
+                        created_events += 1
                     except (json.JSONDecodeError, RuntimeError) as error:
                         print(f"      ❌ Synthesis failed: {error}")
 
@@ -67,6 +71,8 @@ class AutographBackfillerAgent:
                 print(f"  ❌ Error reading git logs for {git_root.name}: {e.stderr}")
 
         print(f"\n✨ All tasks complete! Check your Obsidian Vault.")
+        if created_events:
+            self.sync_agent.sync()
 
 if __name__ == "__main__":
     import sys

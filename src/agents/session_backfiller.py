@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
 
 from config.settings import Config
+from src.agents.sync_agent import AutographSyncAgent
 from src.core.drivers.jsonl_session_driver import (
     ClaudeDriver,
     CodexDriver,
@@ -24,6 +25,7 @@ class SessionBackfillAgent:
         self.config = Config()
         self.vault_manager = VaultManager(self.config.VAULT_ROOT)
         self.synthesizer = Synthesizer()
+        self.sync_agent = AutographSyncAgent(self.vault_manager.vault_root)
         self.drivers = [
             CopilotDriver("copilot", self.config),
             ClaudeDriver("claude", self.config),
@@ -137,4 +139,6 @@ class SessionBackfillAgent:
                 completed += 1
 
         print(f"✅ Created {completed} historical session notes.")
+        if completed:
+            self.sync_agent.sync()
         return completed

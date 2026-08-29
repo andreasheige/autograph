@@ -1,6 +1,6 @@
 import subprocess
+from datetime import datetime
 from pathlib import Path
-import os
 
 class AutographSyncAgent:
     def __init__(self, vault_root: Path):
@@ -8,53 +8,82 @@ class AutographSyncAgent:
 
     def sync(self):
         """
-        Performs a safe git sync: pull, add, commit, and push.
+        Commits and pushes Markdown changes without staging unrelated vault files.
         """
         print(f"🔄 Starting Vault synchronization in: {self.vault_root}")
-        
+
         if not (self.vault_root / ".git").exists():
             print(f"❌ Error: {self.vault_root} is not a Git repository. Please run 'git init' in your vault.")
             return False
 
         try:
-            # 1. Git Pull (to prevent conflicts from other devices)
             print("  📥 Pulling latest changes from remote...")
-            subprocess.run(["git", "-C", str(self.vault_root), "pull", "--rebase"], 
-                           check=True, capture_output=True, text=True)
+            subprocess.run(
+                ["git", "-C", str(self.vault_root), "pull", "--rebase"],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
 
-            # 2. Git Add
-            print("  ➕ Staging changes...")
-            subprocess.run(["git", "-C", str(self.vault_root), "add", "."], 
-                           check=True, capture_output=True, text=True)
+            print("  ➕ Staging Markdown changes...")
+            subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(self.vault_root),
+                    "add",
+                    "--all",
+                    "--",
+                    ":(glob)**/*.md",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
 
-            # 3. Git Commit
-            # We use a custom message. We check if there are changes to avoid error on empty commit.
-            print("  📝 Checking for new changes to commit...")
-            status = subprocess.run(["git", "-C", str(self.vault_root), "status", "--porcelain"], 
-                                    check=True, capture_output=True, text=True).stdout
-            
-            if not status.strip():
-                print("  ℹ️ No new changes to commit in the vault.")
+            staged_changes = subprocess.run(
+                ["git", "-C", str(self.vault_root), "diff", "--cached", "--quiet"],
+                capture_output=True,
+                text=True,
+            )
+            if staged_changes.returncode == 0:
+                print("  ℹ️ No Markdown changes to commit in the vault.")
                 return True
+            if staged_changes.returncode != 1:
+                raise subprocess.CalledProcessError(
+                    staged_changes.returncode,
+                    staged_changes.args,
+                    staged_changes.stdout,
+                    staged_changes.stderr,
+                )
 
-            commit_msg = f"Autograph: Automated daily sync ({subprocess.run(['date'] , capture_output=True, text=True).stdout.strip()})"
-            subprocess.run(["git", "-C", str(self.vault_root), "commit", "-m", commit_msg], 
-                           check=True, capture_output=True, text=True)
+            commit_msg = (
+                "Autograph: sync Markdown "
+                f"({datetime.now().astimezone().isoformat(timespec='seconds')})"
+            )
+            subprocess.run(
+                ["git", "-C", str(self.vault_root), "commit", "-m", commit_msg],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
             print(f"  ✅ Committed: {commit_msg}")
 
-            # 4. Git Push
             print("  📤 Pushing changes to remote...")
-            subprocess.run(["git", "-C", str(self.vault_root), "push"], 
-                           check=True, capture_output=True, text=True)
-            
+            subprocess.run(
+                ["git", "-C", str(self.vault_root), "push"],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
             print(f"✨ Vault sync successful!")
             return True
 
         except subprocess.CalledProcessError as e:
             print(f"❌ Git Error during sync: {e.stderr}")
             return False
-        except Exception as e:
-            print(f"❌ Unexpected error during sync: {e}")
+        except OSError as error:
+            print(f"❌ Could not run Git during sync: {error}")
             return False
 
 if __name__ == "__main__":

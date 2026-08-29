@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Tuple
 
 from config.settings import Config
+from src.agents.sync_agent import AutographSyncAgent
 from src.core.drivers.jsonl_session_driver import (
     ClaudeDriver,
     CodexDriver,
@@ -29,6 +30,7 @@ class DailyBackfillAgent:
         self.config = Config()
         self.vault_manager = VaultManager(self.config.VAULT_ROOT)
         self.synthesizer = Synthesizer()
+        self.sync_agent = AutographSyncAgent(self.vault_manager.vault_root)
         self.drivers = [
             CopilotDriver("copilot", self.config),
             ClaudeDriver("claude", self.config),
@@ -331,4 +333,6 @@ class DailyBackfillAgent:
                 print(f"✅ Created historical daily note: {date}")
 
         print(f"✅ Created {created} historical daily notes.")
+        if created:
+            self.sync_agent.sync()
         return created
