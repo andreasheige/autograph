@@ -27,6 +27,7 @@ def test_render_daily_note_includes_technical_sections_and_links():
     assert "[[projects/Autograph/commits/abc123def456|" in content
     assert "[[projects/Autograph|Autograph]]" in content
     assert "[[agents/Ollama|Ollama]]" in content
+    assert "## Connected graph" in content
     assert "[[daily_notes/2026-08-28|2026-08-28]]" in content
 
 
