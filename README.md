@@ -141,6 +141,13 @@ python3 run_vault_cleanup.py
 This removes only historical event notes containing a session narrative and an empty entity
 list. Commit notes, daily notes, entity notes, manual notes, and session records are retained.
 
+#### 6. Connecting Existing Daily Notes
+To add verified agent and commit links to existing generated daily notes without invoking
+Ollama:
+```bash
+python3 run_daily_linker.py --days 14
+```
+
 ---
 
 ## 🛠️ Configuration (`.env`)
