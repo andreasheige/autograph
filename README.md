@@ -8,6 +8,9 @@
 
 Autograph is a modular, agentic system designed to bridge the gap between your development workflow and your personal knowledge management (PKM) system. It observes your Git activity, extracts meaningful entities and relationships, and uses local LLMs to synthesize these events into beautiful, daily journal entries.
 
+Read [the architecture and data-flow guide](docs/architecture.md) for the session
+collection, bounded daily synthesis, linking, automation, and vault-sync design.
+
 ---
 
 ## ✨ Key Features
