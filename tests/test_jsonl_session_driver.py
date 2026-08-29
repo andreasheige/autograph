@@ -5,7 +5,6 @@ from types import SimpleNamespace
 
 from src.core.drivers.jsonl_session_driver import CopilotDriver
 from src.agents.session_trigger import MultiRepositorySessionTriggerAgent
-from src.agents.session_backfiller import SessionBackfillAgent
 
 
 def test_copilot_driver_reads_only_new_records(tmp_path):
@@ -125,25 +124,3 @@ def test_copilot_driver_reads_recent_history_without_changing_live_cursors(tmp_p
 
     assert [event["content"] for event in events] == ["recent"]
     assert not cursor_path.exists()
-
-
-def test_session_backfill_chunks_oversized_sessions():
-    events = [
-        {
-            "source": "copilot",
-            "timestamp": "2026-08-28T09:00:00Z",
-            "role": "user",
-            "content": "a" * 16000,
-        },
-        {
-            "source": "copilot",
-            "timestamp": "2026-08-28T09:01:00Z",
-            "role": "assistant",
-            "content": "b" * 16000,
-        },
-    ]
-
-    chunks = SessionBackfillAgent._event_chunks(events)
-
-    assert len(chunks) == 2
-    assert all(len(chunk) == 1 for chunk in chunks)

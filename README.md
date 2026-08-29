@@ -108,13 +108,11 @@ python3 run_summary.py
 ```
 
 #### 3. Backfilling Agent Sessions
-To create notes from retained Copilot, Claude, Codex, and Pi sessions from the last
-two weeks:
+To incorporate retained Copilot, Claude, Codex, and Pi sessions into compact daily notes:
 ```bash
 python3 run_session_backfill.py --days 14
 ```
-This is explicit rather than automated: it reads historical local assistant records and
-may generate many notes.
+This does not create one Markdown file per session. It uses the bounded daily-note pipeline.
 
 #### 4. Backfilling Daily Notes
 To regenerate daily notes from retained local sessions and Git commits:
@@ -130,6 +128,15 @@ Daily-note generation first filters and deduplicates local session records, grou
 repository and session, and associates nearby commits. It then synthesizes no more than six
 technical sections plus one day overview per date. This keeps the scheduled daily job bounded
 and makes every section traceable to a project and, when available, a commit.
+
+#### 5. Removing Legacy Session Fragments
+To remove obsolete generated session-fragment notes that predate the compact daily-note
+pipeline:
+```bash
+python3 run_vault_cleanup.py
+```
+This removes only historical event notes containing a session narrative and an empty entity
+list. Commit notes, daily notes, entity notes, manual notes, and session records are retained.
 
 ---
 

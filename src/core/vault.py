@@ -80,7 +80,9 @@ class VaultManager:
                         f.write(f"\n- Observed in history on {datetime.datetime.now().strftime('%Y-%m-%d')}")
         return True
 
-    def write_commit_note(self, project_name, commit_id, title, date):
+    def write_commit_note(
+        self, project_name, commit_id, title, date, session_context=None
+    ):
         """Create or update a stable note for a Git commit."""
         safe_project_name = project_name.replace(" ", "_").replace("/", "_").replace(":", "")
         safe_commit_id = "".join(
@@ -89,14 +91,23 @@ class VaultManager:
         commit_dir = self.vault_root / "projects" / safe_project_name / "commits"
         commit_dir.mkdir(parents=True, exist_ok=True)
         commit_file = commit_dir / f"{safe_commit_id}.md"
-        commit_file.write_text(
+        existing_context = ""
+        if commit_file.exists():
+            existing_content = commit_file.read_text(encoding="utf-8", errors="replace")
+            marker = "## Session context\n"
+            if marker in existing_content:
+                existing_context = existing_content.split(marker, 1)[1].strip()
+        context = session_context.strip() if session_context else existing_context
+        content = (
             f"# {safe_commit_id[:12]} {title}\n\n"
             f"- **Commit:** `{safe_commit_id}`\n"
             f"- **Date:** {date}\n"
             f"- **Project:** [[projects/{safe_project_name}|{project_name}]]\n"
-            f"- **Related daily note:** [[daily_notes/{date}|{date}]]\n",
-            encoding="utf-8",
+            f"- **Related daily note:** [[daily_notes/{date}|{date}]]\n"
         )
+        if context:
+            content += f"\n## Session context\n\n{context}\n"
+        commit_file.write_text(content, encoding="utf-8")
 
     def write_project_note(self, project_name):
         """Create a stable project hub for daily and commit note links."""
@@ -110,6 +121,21 @@ class VaultManager:
             f"- **Events:** [[projects/{safe_project_name}/events]]\n",
             encoding="utf-8",
         )
+
+    def prune_legacy_session_notes(self) -> int:
+        """Delete only obsolete session fragments replaced by compact daily notes."""
+        removed = 0
+        for event_file in self.vault_root.glob("projects/*/events/*.md"):
+            content = event_file.read_text(encoding="utf-8", errors="replace")
+            try:
+                payload = content.split("```json\n", 1)[1].split("\n```", 1)[0]
+                data = json.loads(payload)
+            except (IndexError, json.JSONDecodeError):
+                continue
+            if isinstance(data.get("narrative"), str) and data.get("entities") == []:
+                event_file.unlink()
+                removed += 1
+        return removed
 
     def find_recent_events(self):
         """Helper for Daily Summary Agent to find events from the last 24 hours."""

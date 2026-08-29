@@ -1,14 +1,11 @@
 import subprocess
-import json
 from config.settings import Config
 from src.agents.sync_agent import AutographSyncAgent
-from src.core.synthesizer import Synthesizer
 from src.core.vault import VaultManager
 
 class AutographBackfillerAgent:
     def __init__(self):
         self.vault_manager = VaultManager()
-        self.synthesizer = Synthesizer()
         self.sync_agent = AutographSyncAgent(self.vault_manager.vault_root)
 
     def run(self, search_dir, days=7):
@@ -47,25 +44,12 @@ class AutographBackfillerAgent:
                 print(f"  Found {len(commits)} commits. Processing...")
 
                 for commit_hash, date_str, author, message in commits:
-                    git_show_cmd = ["git", "-C", str(git_root), "show", "--name-only", "--format=", commit_hash]
-                    files_result = subprocess.run(
-                        git_show_cmd, capture_output=True, text=True, check=True
-                    )
-                    changed_files = [
-                        path for path in files_result.stdout.splitlines() if path.strip()
-                    ]
-                    event_text = (
-                        f"[{date_str}] {author} committed {commit_hash[:12]}: {message}\n"
-                        f"Changed files:\n" + "\n".join(f"- {path}" for path in changed_files)
-                    )
-
                     print(f"    Processing: {message}")
-                    try:
-                        knowledge_data = json.loads(self.synthesizer.synthesize(event_text))
-                        self.vault_manager.write_event(git_root.name, event_text, knowledge_data)
-                        created_events += 1
-                    except (json.JSONDecodeError, RuntimeError) as error:
-                        print(f"      ❌ Synthesis failed: {error}")
+                    self.vault_manager.write_project_note(git_root.name)
+                    self.vault_manager.write_commit_note(
+                        git_root.name, commit_hash, message, date_str[:10]
+                    )
+                    created_events += 1
 
             except subprocess.CalledProcessError as e:
                 print(f"  ❌ Error reading git logs for {git_root.name}: {e.stderr}")

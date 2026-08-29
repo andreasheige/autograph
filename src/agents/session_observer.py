@@ -100,17 +100,18 @@ class SessionObserverAgent:
             
             if summary_story:
                 # 4. Save to the vault
-                filename = f"session_log_{time.strftime('%Y%m%d_%H%M%S')}.md"
                 project_name = (
-                    f"{repository.name}_sessions" if repository else "system_sessions"
+                    repository.name if repository else "system"
                 )
-                
-                self.vault_manager.write_event(
+                self.vault_manager.write_project_note(project_name)
+                self.vault_manager.write_commit_note(
                     project_name,
-                    filename,
-                    {"entities": [], "narrative": summary_story},
+                    commit_hash,
+                    f"Session context for {commit_hash[:12]}",
+                    time.strftime("%Y-%m-%d"),
+                    session_context=summary_story,
                 )
-                print(f"✅ [SessionObserver] Session archive created: {filename}")
+                print(f"✅ [SessionObserver] Session context linked to {commit_hash[:12]}")
                 self.sync_agent.sync()
             else:
                 print("⚠️ [SessionObserver] Synthesizer produced no content.")
