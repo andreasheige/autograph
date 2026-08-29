@@ -126,6 +126,11 @@ notes are never overwritten. Without that flag, completed generated days are ret
 interrupted import can resume. Use `--date YYYY-MM-DD --replace-generated` to regenerate a
 single marked day.
 
+Daily-note generation first filters and deduplicates local session records, groups them by
+repository and session, and associates nearby commits. It then synthesizes no more than six
+technical sections plus one day overview per date. This keeps the scheduled daily job bounded
+and makes every section traceable to a project and, when available, a commit.
+
 ---
 
 ## 🛠️ Configuration (`.env`)

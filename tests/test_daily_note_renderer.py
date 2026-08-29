@@ -13,7 +13,7 @@ def test_render_daily_note_includes_technical_sections_and_links():
                 "went_well": "All drivers loaded.",
                 "learned": "Cursor state avoids duplicates.",
                 "remember": "Keep sources local.",
-                "commits": ["abc123"],
+                "commits": ["abc123def456"],
             }
         ],
         [{"id": "abc123def456", "title": "Add ingestion", "project": "Autograph"}],
@@ -25,6 +25,7 @@ def test_render_daily_note_includes_technical_sections_and_links():
     assert "**What we learned**" in content
     assert "Weather" not in content
     assert "[[projects/Autograph/commits/abc123def456|" in content
+    assert "[[projects/Autograph|Autograph]]" in content
     assert "[[daily_notes/2026-08-28|2026-08-28]]" in content
 
 
