@@ -148,6 +148,13 @@ Ollama:
 python3 run_daily_linker.py --days 14
 ```
 
+#### 7. Rebuilding Vault Graph Navigation
+To create the stable root, daily, agent, project, and per-project index notes that connect
+related vault folders:
+```bash
+python3 run_vault_graph_index.py
+```
+
 ---
 
 ## 🛠️ Configuration (`.env`)
