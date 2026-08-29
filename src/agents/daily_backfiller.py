@@ -166,6 +166,7 @@ class DailyBackfillAgent:
                 print(f"❌ Could not generate {date} work unit {index}: {error}")
                 continue
             section["project"] = unit.project
+            section["source"] = unit.source
             section["commits"] = [commit.id for commit in unit.commits]
             sections.append(section)
         return sections
