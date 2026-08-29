@@ -23,7 +23,9 @@ class DriverManager:
         Loads drivers based on the environment variable `AUTOGRAPH_SESSION_DRIVERS`.
         Example: `AUTOGRAPH_SESSION_DRIVERS=shell,pi`
         """
-        enabled_driver_names = os.getenv("AUTOGRAPH_SESSION_DRIVERS", "").split(",")
+        enabled_driver_names = os.getenv(
+            "AUTOGRAPH_SESSION_DRIVERS", "shell,copilot,claude,codex,pi"
+        ).split(",")
         enabled_driver_names = [name.strip() for name in enabled_driver_names if name.strip()]
         print(f"DEBUG: [DriverManager] Enabled drivers from ENV: {enabled_driver_names}")
 

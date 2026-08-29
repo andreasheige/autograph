@@ -39,7 +39,7 @@ def test_write_event_creates_file(temp_vault, tmp_path):
         assert "Entity1" in content
         assert "Entity2" in content
 
-def test_find_all_git_roots_empty(temp_vault):
+def test_find_all_git_roots_empty(temp_vault, tmp_path):
     """Verifies that searching an empty directory returns nothing."""
     # Using a temp directory with no git
     roots = temp_vault.find_all_git_roots(tmp_path)

@@ -1,7 +1,15 @@
 import os
 import time
+import json
+from pathlib import Path
 from typing import List, Dict, Any
 from src.core.drivers.manager import DriverManager
+from src.core.drivers.jsonl_session_driver import (
+    ClaudeDriver,
+    CodexDriver,
+    CopilotDriver,
+    PiDriver,
+)
 from src.core.drivers.shell_driver import ShellDriver
 from src.core.synthesizer import Synthesizer
 from src.core.vault import VaultManager
@@ -20,12 +28,20 @@ class SessionObserverAgent:
     def __init__(self):
         self.config = Config()
         self.vault_manager = VaultManager(self.config.VAULT_ROOT)
-        self.synthesizer = Synthesizer(self.config)
+        self.synthesizer = Synthesizer()
         self.buffer = SessionBuffer(self.config.SESSION_BUFFER_PATH)
         
         # Drivers
-        self.driver_manager = DriverManager(driver_classes=[ShellDriver], config=
-                                           self.config)
+        self.driver_manager = DriverManager(
+            driver_classes=[
+                ShellDriver,
+                CopilotDriver,
+                ClaudeDriver,
+                CodexDriver,
+                PiDriver,
+            ],
+            config=self.config,
+        )
         
         self.is_running = False
 
@@ -44,12 +60,13 @@ class SessionObserverAgent:
 
         # Accumulate the findings into our persistent buffer
         for event in events:
-            # We append the event as a string representation
-            self.buffer.append(str(event))
+            self.buffer.append(json.dumps(event))
             
         print(f"📥 [SessionObserver] Buffered {len(events)} new observations.")
 
-    def handle_commit_event(self, commit_hash: str) -> None:
+    def handle_commit_event(
+        self, commit_hash: str, repository: Path = None
+    ) -> None:
         """
         THE TRIGGER: This is called when a Git commit is detected.
         It flushes the buffer, synthesizes the engineering narrative, and writes to the vault.
@@ -71,7 +88,8 @@ class SessionObserverAgent:
         # We wrap the raw string in a structure the Synthesizer expects
         prompt_data = {
             "session_raw_log": session_data_raw,
-            "trigger_commit": commit_hash
+            "trigger_commit": commit_hash,
+            "repository": str(repository) if repository else "unknown",
         }
 
         try:
@@ -80,13 +98,15 @@ class SessionObserverAgent:
             
             if summary_story:
                 # 4. Save to the vault
-                timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
                 filename = f"session_log_{time.strftime('%Y%m%d_%H%M%S')}.md"
+                project_name = (
+                    f"{repository.name}_sessions" if repository else "system_sessions"
+                )
                 
                 self.vault_manager.write_event(
-                    project="system_sessions", 
-                    event_id=filename, 
-                    content=summary_story
+                    project_name,
+                    filename,
+                    {"entities": [], "narrative": summary_story},
                 )
                 print(f"✅ [SessionObserver] Session archive created: {filename}")
             else:
