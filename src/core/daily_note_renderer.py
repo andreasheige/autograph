@@ -20,6 +20,11 @@ def commit_note_link(commit: Dict[str, str]) -> str:
     )
 
 
+def project_note_link(project: str) -> str:
+    clean_project = _clean_link_text(project).replace(" ", "_").replace("/", "_")
+    return f"[[projects/{clean_project}|{project}]]"
+
+
 def render_daily_note(
     date: str,
     summary: str,
@@ -74,11 +79,14 @@ def render_daily_note(
             for commit_id in section_commit_ids
             if isinstance(commit_id, str) and commit_id in commits_by_id
         ]
-        if not section_commits:
-            section_commits = commits
         if section_commits:
             lines.extend(["", "**Related commits**"])
             lines.extend(f"- {commit_note_link(commit)}" for commit in section_commits)
+        project = section.get("project")
+        if not isinstance(project, str) and section_commits:
+            project = section_commits[0]["project"]
+        if isinstance(project, str) and project != "unassigned":
+            lines.extend(["", f"**Related project:** {project_note_link(project)}"])
 
     related_links = [daily_note_link(related_date) for related_date in related_dates]
     if related_links:

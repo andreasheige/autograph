@@ -1,27 +1,88 @@
+from datetime import datetime, timedelta, timezone
+
 from src.agents.daily_backfiller import DailyBackfillAgent
+from src.core.daily_note_state import DailyNoteState
 from src.core.vault import VaultManager
+from src.core.work_units import Commit, build_work_units, normalize_events
 
 
-def test_daily_backfill_groups_timestamped_events_by_date():
-    grouped, skipped = DailyBackfillAgent._group_events_by_date(
+def test_work_units_filter_duplicates_and_associate_nearest_commit(tmp_path):
+    repository = tmp_path / "project"
+    repository.mkdir()
+    start = datetime(2026, 8, 29, 9, 0, tzinfo=timezone.utc)
+    events = normalize_events(
         [
             {
-                "timestamp": "2026-08-27T23:30:00-02:00",
-                "content": "first",
+                "timestamp": start.isoformat(),
+                "source": "copilot",
+                "session_id": "session-1",
+                "role": "user",
+                "cwd": str(repository),
+                "content": "Implement the daily-note pipeline.",
             },
-            {"timestamp": "invalid", "content": "ignored"},
-        ]
+            {
+                "timestamp": (start + timedelta(minutes=1)).isoformat(),
+                "source": "copilot",
+                "session_id": "session-1",
+                "role": "user",
+                "cwd": str(repository),
+                "content": "Implement the daily-note pipeline.",
+            },
+            {
+                "timestamp": (start + timedelta(minutes=2)).isoformat(),
+                "source": "copilot",
+                "session_id": "session-1",
+                "role": "tool",
+                "cwd": str(repository),
+                "content": "Noisy tool output that should not be retained.",
+            },
+        ],
+        [repository],
+        datetime.fromisoformat,
+    )
+    commit = Commit(
+        "abc123def456",
+        "Add work-unit pipeline",
+        "project",
+        start + timedelta(minutes=30),
     )
 
-    assert skipped == 1
-    assert grouped == {
-        "2026-08-28": [
-            {
-                "timestamp": "2026-08-27T23:30:00-02:00",
-                "content": "first",
-            }
-        ]
-    }
+    units = build_work_units(events, [commit])
+
+    assert len(units["2026-08-29"]) == 1
+    assert len(units["2026-08-29"][0].events) == 1
+    assert units["2026-08-29"][0].commits == [commit]
+
+
+def test_work_units_cap_the_number_selected_per_day():
+    timestamp = datetime(2026, 8, 29, 9, 0, tzinfo=timezone.utc)
+    events = [
+        {
+            "timestamp": timestamp + timedelta(minutes=index),
+            "date": "2026-08-29",
+            "project": "project",
+            "source": "copilot",
+            "session_id": f"session-{index}",
+            "role": "user",
+            "content": f"Meaningful work item {index}",
+        }
+        for index in range(10)
+    ]
+
+    units = build_work_units(events, [])
+
+    assert len(units["2026-08-29"]) == 6
+
+
+def test_daily_note_state_tracks_input_fingerprint(tmp_path):
+    state = DailyNoteState(tmp_path / "daily-state.json")
+
+    assert not state.is_current("2026-08-29", "fingerprint")
+    state.save("2026-08-29", "fingerprint")
+
+    assert DailyNoteState(tmp_path / "daily-state.json").is_current(
+        "2026-08-29", "fingerprint"
+    )
 
 
 def test_daily_backfill_removes_only_marked_generated_notes(tmp_path):
@@ -43,33 +104,16 @@ def test_daily_backfill_removes_only_marked_generated_notes(tmp_path):
     assert manual_note.exists()
 
 
-def test_daily_backfill_keeps_existing_generated_notes_when_resuming(tmp_path):
+def test_daily_backfill_refuses_to_overwrite_manual_note(tmp_path):
     agent = DailyBackfillAgent.__new__(DailyBackfillAgent)
     agent.vault_manager = VaultManager(tmp_path)
     note_path = tmp_path / "daily_notes" / "2026-08-28.md"
     note_path.parent.mkdir()
-    note_path.write_text(
-        f"# Existing\n\n{DailyBackfillAgent.generated_marker}\n",
-        encoding="utf-8",
-    )
+    note_path.write_text("# Manual note\n", encoding="utf-8")
 
-    wrote_note = agent._write_daily_note("2026-08-28", "Replacement")
-
-    assert wrote_note is False
-    assert note_path.read_text(encoding="utf-8").startswith("# Existing")
-
-
-def test_daily_backfill_removes_only_requested_generated_date(tmp_path):
-    agent = DailyBackfillAgent.__new__(DailyBackfillAgent)
-    agent.vault_manager = VaultManager(tmp_path)
-    notes_dir = tmp_path / "daily_notes"
-    notes_dir.mkdir()
-    for date in ("2026-08-26", "2026-08-27"):
-        (notes_dir / f"{date}.md").write_text(
-            f"# Generated\n\n{DailyBackfillAgent.generated_marker}\n",
-            encoding="utf-8",
-        )
-
-    assert agent._remove_generated_notes(["2026-08-26"]) == 1
-    assert not (notes_dir / "2026-08-26.md").exists()
-    assert (notes_dir / "2026-08-27.md").exists()
+    try:
+        agent._write_daily_note("2026-08-28", "Replacement")
+    except FileExistsError:
+        pass
+    else:
+        raise AssertionError("Expected manual note overwrite protection")

@@ -93,7 +93,21 @@ class VaultManager:
             f"# {safe_commit_id[:12]} {title}\n\n"
             f"- **Commit:** `{safe_commit_id}`\n"
             f"- **Date:** {date}\n"
+            f"- **Project:** [[projects/{safe_project_name}|{project_name}]]\n"
             f"- **Related daily note:** [[daily_notes/{date}|{date}]]\n",
+            encoding="utf-8",
+        )
+
+    def write_project_note(self, project_name):
+        """Create a stable project hub for daily and commit note links."""
+        safe_project_name = project_name.replace(" ", "_").replace("/", "_").replace(":", "")
+        project_file = self.vault_root / "projects" / f"{safe_project_name}.md"
+        if project_file.exists():
+            return
+        project_file.write_text(
+            f"# {project_name}\n\n"
+            f"- **Commits:** [[projects/{safe_project_name}/commits]]\n"
+            f"- **Events:** [[projects/{safe_project_name}/events]]\n",
             encoding="utf-8",
         )
 
