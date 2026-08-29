@@ -1,4 +1,5 @@
 import datetime
+import hashlib
 import os
 import json
 from pathlib import Path
@@ -42,11 +43,14 @@ class VaultManager:
         """Writes a single historical event to the vault."""
         safe_project_name = project_name.replace(' ', '_').replace('/', '_').replace(':', '')
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        event_digest = hashlib.sha256(
+            f"{message}{timestamp}".encode("utf-8")
+        ).hexdigest()[:10]
         
         event_dir = self.vault_root / "projects" / safe_project_name / "events"
         event_dir.mkdir(parents=True, exist_ok=True)
         
-        event_file = event_dir / f"backfill_{timestamp}.md"
+        event_file = event_dir / f"backfill_{timestamp}_{event_digest}.md"
         
         content = f"# Historical Event\n\n**Source:** {message}\n\n## Extracted Data\n```json\n{json.dumps(data, indent=2)}\n```\n\n## Links\n"
         
@@ -75,6 +79,23 @@ class VaultManager:
                     with open(ent_file, "a") as f:
                         f.write(f"\n- Observed in history on {datetime.datetime.now().strftime('%Y-%m-%d')}")
         return True
+
+    def write_commit_note(self, project_name, commit_id, title, date):
+        """Create or update a stable note for a Git commit."""
+        safe_project_name = project_name.replace(" ", "_").replace("/", "_").replace(":", "")
+        safe_commit_id = "".join(
+            character for character in commit_id if character.isalnum()
+        )
+        commit_dir = self.vault_root / "projects" / safe_project_name / "commits"
+        commit_dir.mkdir(parents=True, exist_ok=True)
+        commit_file = commit_dir / f"{safe_commit_id}.md"
+        commit_file.write_text(
+            f"# {safe_commit_id[:12]} {title}\n\n"
+            f"- **Commit:** `{safe_commit_id}`\n"
+            f"- **Date:** {date}\n"
+            f"- **Related daily note:** [[daily_notes/{date}|{date}]]\n",
+            encoding="utf-8",
+        )
 
     def find_recent_events(self):
         """Helper for Daily Summary Agent to find events from the last 24 hours."""

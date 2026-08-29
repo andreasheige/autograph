@@ -1,13 +1,13 @@
 import subprocess
 import json
 from config.settings import Config
-from core.synthesizer import AutographSynthesizer
-from core.vault import VaultManager
+from src.core.synthesizer import Synthesizer
+from src.core.vault import VaultManager
 
 class AutographBackfillerAgent:
     def __init__(self):
         self.vault_manager = VaultManager()
-        self.synthesizer = AutographSynthesizer()
+        self.synthesizer = Synthesizer()
 
     def run(self, search_dir, days=7):
         git_roots = self.vault_manager.find_all_git_roots(search_dir)
@@ -22,37 +22,49 @@ class AutographBackfillerAgent:
             print(f"\n🚀 Processing Repository: {git_root.name}")
             
             git_log_cmd = [
-                "git", "-C", str(git_root), 
-                "log", f"--since={days} days ago", 
-                "--pretty=format:%H|%ad|%an|%s"
+                "git", "-C", str(git_root),
+                "log", f"--since={days} days ago",
+                "--date=iso-strict",
+                "--pretty=format:%H%x00%ad%x00%an%x00%s%x00",
             ]
-            
+
             try:
                 result = subprocess.run(git_log_cmd, capture_output=True, text=True, check=True)
-                logs = result.stdout.strip().split('\n')
-                
-                if not logs or (len(logs) == 1 and logs[0] == ''):
+                fields = result.stdout.split("\0")
+                commits = [
+                    fields[index:index + 4]
+                    for index in range(0, len(fields) - 1, 4)
+                    if len(fields[index:index + 4]) == 4
+                ]
+
+                if not commits:
                     print(f"  ℹ️ No git logs found for {git_root.name} in this period.")
                     continue
 
-                print(f"  Found {len(logs)} commits. Processing...")
+                print(f"  Found {len(commits)} commits. Processing...")
 
-                for line in logs:
-                    if not line: continue
-                    parts = line.split("|")
-                    if len(parts) < 4: continue
-                    
-                    commit_hash, date_str, author, message = parts[0], parts[1], parts[2], parts[3]
-                    
-                    # Step 2: Get the files changed in THIS commit
+                for commit_hash, date_str, author, message in commits:
                     git_show_cmd = ["git", "-C", str(git_root), "show", "--name-only", "--format=", commit_hash]
-                    files_result = subprocess.run(git_show_cmd, capture_output=..
-            # Wait, I'm making the same mistake. I'll just rewrite the whole file properly with absolute paths.
+                    files_result = subprocess.run(
+                        git_show_cmd, capture_output=True, text=True, check=True
+                    )
+                    changed_files = [
+                        path for path in files_result.stdout.splitlines() if path.strip()
+                    ]
+                    event_text = (
+                        f"[{date_str}] {author} committed {commit_hash[:12]}: {message}\n"
+                        f"Changed files:\n" + "\n".join(f"- {path}" for path in changed_files)
+                    )
+
+                    print(f"    Processing: {message}")
+                    try:
+                        knowledge_data = json.loads(self.synthesizer.synthesize(event_text))
+                        self.vault_manager.write_event(git_root.name, event_text, knowledge_data)
+                    except (json.JSONDecodeError, RuntimeError) as error:
+                        print(f"      ❌ Synthesis failed: {error}")
 
             except subprocess.CalledProcessError as e:
                 print(f"  ❌ Error reading git logs for {git_root.name}: {e.stderr}")
-            except Exception as e:
-                print(f"  ❌ Unexpected error for {git_root.name}: {e}")
 
         print(f"\n✨ All tasks complete! Check your Obsidian Vault.")
 

@@ -1,6 +1,10 @@
 import time
 import sys
+import threading
+
 from src.agents.session_observer import SessionObserverAgent
+from src.agents.session_trigger import MultiRepositorySessionTriggerAgent
+from config.settings import Config
 
 def run_daemon(interval_seconds: int = 60):
     """
@@ -10,9 +14,8 @@ def run_daemon(interval_seconds: int = 60):
     
     agent = SessionObserverAgent()
     
-    # The trigger agent needs the commit handler as a callback
-    trigger_agent = SessionTriggerAgent(
-        repo_path=".", 
+    trigger_agent = MultiRepositorySessionTriggerAgent(
+        search_dir=Config.SEARCH_DIR,
         trigger_callback=agent.handle_commit_event
     )
     
@@ -34,11 +37,9 @@ def run_daemon(interval_seconds: int = 60):
         print("\n🛑 [SessionObserver-Daemon] Shutting down gracefully...")
         trigger_agent.stop()
         agent.stop()
-    except Exception as e:
-        print(f"\n❌ [SessionObserver-Daemon] CRITICAL ERROR: {template_error} e}")
+    except Exception as error:
+        print(f"\n❌ [SessionObserver-Daemon] CRITICAL ERROR: {error}")
         sys.exit(1)
 
 if __name__ == "__main__":
-    import os
-    # Pulse every 60 seconds by default
     run_daemon(60)
