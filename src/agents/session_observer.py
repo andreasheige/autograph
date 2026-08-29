@@ -3,6 +3,7 @@ import time
 import json
 from pathlib import Path
 from typing import List, Dict, Any
+from src.agents.sync_agent import AutographSyncAgent
 from src.core.drivers.manager import DriverManager
 from src.core.drivers.jsonl_session_driver import (
     ClaudeDriver,
@@ -30,6 +31,7 @@ class SessionObserverAgent:
         self.vault_manager = VaultManager(self.config.VAULT_ROOT)
         self.synthesizer = Synthesizer()
         self.buffer = SessionBuffer(self.config.SESSION_BUFFER_PATH)
+        self.sync_agent = AutographSyncAgent(self.vault_manager.vault_root)
         
         # Drivers
         self.driver_manager = DriverManager(
@@ -109,6 +111,7 @@ class SessionObserverAgent:
                     {"entities": [], "narrative": summary_story},
                 )
                 print(f"✅ [SessionObserver] Session archive created: {filename}")
+                self.sync_agent.sync()
             else:
                 print("⚠️ [SessionObserver] Synthesizer produced no content.")
 
