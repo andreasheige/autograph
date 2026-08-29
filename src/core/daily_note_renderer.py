@@ -25,6 +25,19 @@ def project_note_link(project: str) -> str:
     return f"[[projects/{clean_project}|{project}]]"
 
 
+def agent_note_link(source: str) -> str:
+    labels = {
+        "claude": "Claude",
+        "codex": "Codex",
+        "copilot": "Copilot",
+        "ollama": "Ollama",
+        "pi": "Pi",
+        "shell": "Shell",
+    }
+    label = labels.get(source.lower(), source.title())
+    return f"[[agents/{label}|{label}]]"
+
+
 def render_daily_note(
     date: str,
     summary: str,
@@ -44,6 +57,8 @@ def render_daily_note(
         "",
         "## Day summary",
         summary.strip(),
+        "",
+        f"**Synthesis model:** {agent_note_link('ollama')}",
     ]
 
     if commits:
@@ -87,6 +102,9 @@ def render_daily_note(
             project = section_commits[0]["project"]
         if isinstance(project, str) and project != "unassigned":
             lines.extend(["", f"**Related project:** {project_note_link(project)}"])
+        source = section.get("source")
+        if isinstance(source, str):
+            lines.extend(["", f"**Agent source:** {agent_note_link(source)}"])
 
     related_links = [daily_note_link(related_date) for related_date in related_dates]
     if related_links:
