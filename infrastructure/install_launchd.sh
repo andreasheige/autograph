@@ -61,7 +61,9 @@ write_summary_plist() {
   <array>
     <string>$python_executable</string>
     <string>-u</string>
-    <string>run_summary.py</string>
+    <string>run_daily_backfill.py</string>
+    <string>--days</string>
+    <string>7</string>
   </array>
   <key>WorkingDirectory</key>
   <string>$repo_root</string>
