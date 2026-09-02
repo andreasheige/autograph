@@ -180,8 +180,10 @@ class DailyBackfillAgent:
         if days <= 0:
             raise ValueError("days must be a positive integer")
 
-        since = datetime.now(timezone.utc) - timedelta(days=days)
         until = datetime.now(timezone.utc)
+        since = (until - timedelta(days=days)).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
         repositories = self._repositories(self.config.SEARCH_DIR)
         raw_events = [
             event
