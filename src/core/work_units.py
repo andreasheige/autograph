@@ -8,7 +8,7 @@ from typing import Dict, Iterable, List, Optional, Tuple
 
 MAX_EVENT_CONTENT = 1600
 MAX_UNIT_EVIDENCE = 6000
-MAX_DAILY_WORK_UNITS = 6
+MAX_DAILY_WORK_UNITS = 20
 COMMIT_ASSOCIATION_WINDOW = timedelta(hours=4)
 
 
