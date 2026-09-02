@@ -3,7 +3,12 @@ from datetime import datetime, timedelta, timezone
 from src.agents.daily_backfiller import DailyBackfillAgent
 from src.core.daily_note_state import DailyNoteState
 from src.core.vault import VaultManager
-from src.core.work_units import Commit, build_work_units, normalize_events
+from src.core.work_units import (
+    MAX_DAILY_WORK_UNITS,
+    Commit,
+    build_work_units,
+    normalize_events,
+)
 
 
 def test_work_units_filter_duplicates_and_associate_nearest_commit(tmp_path):
@@ -66,12 +71,12 @@ def test_work_units_cap_the_number_selected_per_day():
             "role": "user",
             "content": f"Meaningful work item {index}",
         }
-        for index in range(10)
+        for index in range(MAX_DAILY_WORK_UNITS + 4)
     ]
 
     units = build_work_units(events, [])
 
-    assert len(units["2026-08-29"]) == 6
+    assert len(units["2026-08-29"]) == MAX_DAILY_WORK_UNITS
 
 
 def test_daily_note_state_tracks_input_fingerprint(tmp_path):
