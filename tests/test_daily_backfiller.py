@@ -1,6 +1,8 @@
+import subprocess
 from datetime import datetime, timedelta, timezone
 
 from src.agents.daily_backfiller import DailyBackfillAgent
+from src.core.daily_note_renderer import commit_note_link
 from src.core.daily_note_state import DailyNoteState
 from src.core.vault import VaultManager
 from src.core.work_units import (
@@ -190,3 +192,44 @@ def test_sections_only_carry_session_links_for_identified_sessions():
     assert sections[0]["models"] == ["claude-opus-5"]
     assert "session_id" not in sections[1]
     assert "models" not in sections[1]
+
+
+def test_commits_since_strips_the_record_separator_from_ids(tmp_path):
+    repository = tmp_path / "project"
+    repository.mkdir()
+    subprocess.run(["git", "-C", str(repository), "init", "-q"], check=True)
+    subprocess.run(
+        ["git", "-C", str(repository), "config", "user.email", "test@example.com"],
+        check=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(repository), "config", "user.name", "Test"], check=True
+    )
+    # The machine installs global hooks; this fixture must not run them.
+    subprocess.run(
+        [
+            "git", "-C", str(repository),
+            "config", "core.hooksPath", str(tmp_path / "no-hooks"),
+        ],
+        check=True,
+    )
+    for index in range(3):
+        (repository / f"file-{index}.txt").write_text("x", encoding="utf-8")
+        subprocess.run(["git", "-C", str(repository), "add", "."], check=True)
+        subprocess.run(
+            ["git", "-C", str(repository), "commit", "-q", "-m", f"commit {index}"],
+            check=True,
+        )
+
+    since = datetime.now(timezone.utc) - timedelta(days=1)
+    commits = DailyBackfillAgent._commits_since(
+        [repository], since, datetime.now(timezone.utc) + timedelta(days=1)
+    )
+
+    assert len(commits) == 3
+    for commit in commits:
+        assert len(commit.id) == 40
+        assert commit.id == commit.id.strip()
+        assert commit_note_link(
+            {"id": commit.id, "title": commit.title, "project": commit.project}
+        ).count("\n") == 0
