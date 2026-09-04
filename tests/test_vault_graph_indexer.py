@@ -69,3 +69,38 @@ def test_graph_indexer_normalizes_legacy_double_entity_extensions(tmp_path):
     assert indexer._normalize_legacy_entity_filenames() == 1
     assert not entity_path.exists()
     assert (entity_path.parent / "CLAUDE.md").exists()
+
+
+def test_graph_indexer_indexes_session_stubs_by_agent(tmp_path):
+    vault_manager = VaultManager(tmp_path)
+    session_path = tmp_path / "sessions" / "claude" / "10a40d72-c7ec-4e33.md"
+    session_path.parent.mkdir(parents=True)
+    session_path.write_text("# Claude session\n", encoding="utf-8")
+
+    indexer = VaultGraphIndexer.__new__(VaultGraphIndexer)
+    indexer.vault_manager = vault_manager
+
+    assert indexer._session_index(tmp_path / "sessions")
+    assert indexer._root_index([])
+
+    index = (tmp_path / "sessions" / "Index.md").read_text(encoding="utf-8")
+    root = (tmp_path / "Autograph.md").read_text(encoding="utf-8")
+    assert "### Claude" in index
+    assert "[[sessions/claude/10a40d72-c7ec-4e33|10a40d72]]" in index
+    assert "[[sessions/Index|Agent sessions]]" in root
+
+
+def test_root_index_omits_the_session_link_until_sessions_exist(tmp_path):
+    indexer = VaultGraphIndexer.__new__(VaultGraphIndexer)
+    indexer.vault_manager = VaultManager(tmp_path)
+
+    assert indexer._root_index([])
+    assert "[[sessions/Index" not in (tmp_path / "Autograph.md").read_text(
+        encoding="utf-8"
+    )
+
+    (tmp_path / "sessions").mkdir()
+    assert indexer._root_index([])
+    assert "[[sessions/Index|Agent sessions]]" in (tmp_path / "Autograph.md").read_text(
+        encoding="utf-8"
+    )

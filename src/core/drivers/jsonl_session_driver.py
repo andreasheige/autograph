@@ -14,6 +14,7 @@ class JsonlSessionDriver(BaseDriver):
     root_attribute = ""
     file_patterns: Iterable[str] = ()
     max_content_length = 12000
+    model_keys = ("model", "modelId", "newModel")
 
     def __init__(self, name: str, config: Any):
         super().__init__(name)
@@ -149,12 +150,7 @@ class JsonlSessionDriver(BaseDriver):
             record.get("ts"),
             *(container.get("timestamp") for container in containers[1:]),
         )
-        session_id = self._first_string(
-            record.get("sessionId"),
-            record.get("session_id"),
-            *(container.get("sessionId") for container in containers[1:]),
-            *(container.get("session_id") for container in containers[1:]),
-        )
+        session_id = self._record_session_id(record)
         if session_id is None and source_path is not None:
             session_id = source_path.parent.name
 
@@ -167,6 +163,42 @@ class JsonlSessionDriver(BaseDriver):
             "cwd": cwd,
             "content": content[: self.max_content_length],
         }
+
+    @classmethod
+    def _record_containers(cls, record: Dict[str, Any]) -> List[Dict[str, Any]]:
+        return [
+            container
+            for container in (
+                record.get("data"),
+                record.get("payload"),
+                record.get("message"),
+            )
+            if isinstance(container, dict)
+        ]
+
+    @classmethod
+    def _record_session_id(cls, record: Dict[str, Any]) -> Optional[str]:
+        containers = cls._record_containers(record)
+        return cls._first_string(
+            record.get("sessionId"),
+            record.get("session_id"),
+            *(container.get("sessionId") for container in containers),
+            *(container.get("session_id") for container in containers),
+        )
+
+    @classmethod
+    def _record_models(cls, record: Dict[str, Any]) -> List[str]:
+        """Read model identifiers from the differing shapes each assistant writes."""
+        return [
+            container[key].strip()
+            for container in [record] + cls._record_containers(record)
+            for key in cls.model_keys
+            if isinstance(container.get(key), str)
+            and container[key].strip()
+            # Claude writes "<synthetic>" for locally generated messages; angle
+            # brackets mark a placeholder, never a model that ran.
+            and "<" not in container[key]
+        ]
 
     @staticmethod
     def _parse_timestamp(timestamp: Optional[str]) -> Optional[datetime]:
@@ -229,6 +261,49 @@ class JsonlSessionDriver(BaseDriver):
             except OSError as error:
                 print(f"⚠️ [{self.source_name}] Could not read {path.name}: {error}")
         return events
+
+    def session_metadata(self, since: datetime) -> Dict[str, Dict[str, Any]]:
+        """Read per-session identity for retained sessions without changing cursors."""
+        if since.tzinfo is None:
+            since = since.replace(tzinfo=timezone.utc)
+
+        sessions: Dict[str, Dict[str, Any]] = {}
+        for path in self._session_files():
+            modified_at = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
+            if modified_at < since:
+                continue
+
+            session_id = None
+            models: List[str] = []
+            try:
+                with open(path, "r", encoding="utf-8", errors="replace") as session_file:
+                    for line in session_file:
+                        try:
+                            record = json.loads(line)
+                        except json.JSONDecodeError:
+                            continue
+                        if not isinstance(record, dict):
+                            continue
+                        session_id = session_id or self._record_session_id(record)
+                        for model in self._record_models(record):
+                            if model not in models:
+                                models.append(model)
+            except OSError as error:
+                print(f"⚠️ [{self.source_name}] Could not read {path.name}: {error}")
+                continue
+
+            sessions[session_id or path.parent.name] = {
+                "models": models,
+                "transcript": self._transcript_reference(path),
+            }
+        return sessions
+
+    def _transcript_reference(self, path: Path) -> str:
+        """Describe a session file without writing an absolute path into the vault."""
+        try:
+            return f"{self.root.name}/{path.relative_to(self.root).as_posix()}"
+        except ValueError:
+            return path.name
 
     def observe(self) -> str:
         events = []

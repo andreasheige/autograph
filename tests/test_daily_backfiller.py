@@ -6,6 +6,7 @@ from src.core.vault import VaultManager
 from src.core.work_units import (
     MAX_DAILY_WORK_UNITS,
     Commit,
+    WorkUnit,
     build_work_units,
     normalize_events,
 )
@@ -122,3 +123,70 @@ def test_daily_backfill_refuses_to_overwrite_manual_note(tmp_path):
         pass
     else:
         raise AssertionError("Expected manual note overwrite protection")
+
+
+def test_daily_backfill_writes_session_stubs_only_for_real_sessions(tmp_path):
+    agent = DailyBackfillAgent.__new__(DailyBackfillAgent)
+    agent.vault_manager = VaultManager(tmp_path)
+    sections = [
+        {"source": "claude", "session_id": "10a40d72-c7ec-4e33-8d64-af2eb61dd0c6"},
+        {"source": "codex", "session_id": ".codex"},
+        {"source": "git", "session_id": "abc123def456"},
+    ]
+    session_metadata = {
+        ("claude", "10a40d72-c7ec-4e33-8d64-af2eb61dd0c6"): {
+            "models": ["claude-opus-5"],
+            "transcript": "claude/projects/session.jsonl",
+        }
+    }
+
+    assert agent._write_session_notes(sections, session_metadata) == 1
+    written = sorted(path.name for path in (tmp_path / "sessions").rglob("*.md"))
+    assert written == ["10a40d72-c7ec-4e33-8d64-af2eb61dd0c6.md"]
+    assert "`claude-opus-5`" in (
+        tmp_path
+        / "sessions"
+        / "claude"
+        / "10a40d72-c7ec-4e33-8d64-af2eb61dd0c6.md"
+    ).read_text(encoding="utf-8")
+
+
+def test_sections_only_carry_session_links_for_identified_sessions():
+    class FakeSynthesizer:
+        @staticmethod
+        def synthesize_work_unit(prompt):
+            return {"title": "Work", "work_done": "Done"}
+
+    start = datetime(2026, 8, 29, 9, 0, tzinfo=timezone.utc)
+    units = [
+        WorkUnit(
+            date="2026-08-29",
+            project="project",
+            source="claude",
+            session_id="10a40d72-c7ec-4e33-8d64-af2eb61dd0c6",
+            start=start,
+            end=start,
+        ),
+        WorkUnit(
+            date="2026-08-29",
+            project="project",
+            source="codex",
+            session_id="04",
+            start=start,
+            end=start,
+        ),
+    ]
+    agent = DailyBackfillAgent.__new__(DailyBackfillAgent)
+    agent.synthesizer = FakeSynthesizer()
+    session_metadata = {
+        ("claude", "10a40d72-c7ec-4e33-8d64-af2eb61dd0c6"): {
+            "models": ["claude-opus-5"]
+        }
+    }
+
+    sections = agent._sections_for_units("2026-08-29", units, session_metadata)
+
+    assert sections[0]["session_id"] == "10a40d72-c7ec-4e33-8d64-af2eb61dd0c6"
+    assert sections[0]["models"] == ["claude-opus-5"]
+    assert "session_id" not in sections[1]
+    assert "models" not in sections[1]
