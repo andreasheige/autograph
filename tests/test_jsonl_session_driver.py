@@ -124,3 +124,63 @@ def test_copilot_driver_reads_recent_history_without_changing_live_cursors(tmp_p
 
     assert [event["content"] for event in events] == ["recent"]
     assert not cursor_path.exists()
+
+
+def test_session_metadata_collects_models_and_transcript(tmp_path):
+    session_root = tmp_path / "copilot"
+    event_file = session_root / "session-1" / "events.jsonl"
+    event_file.parent.mkdir(parents=True)
+    event_file.write_text(
+        "\n".join(
+            json.dumps(record)
+            for record in (
+                {
+                    "type": "session.start",
+                    "data": {"sessionId": "session-1"},
+                    "timestamp": "2026-08-28T09:00:00Z",
+                },
+                {
+                    "type": "session.model_change",
+                    "data": {"newModel": "claude-sonnet-5"},
+                },
+                {
+                    "type": "session.model_change",
+                    "data": {"newModel": "claude-sonnet-5"},
+                },
+                {"type": "session.model_change", "data": {"newModel": "gpt-5.6-sol"}},
+                {"type": "message", "data": {"model": "<synthetic>"}},
+            )
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    config = SimpleNamespace(
+        COPILOT_SESSION_ROOT=session_root,
+        SESSION_CURSOR_PATH=tmp_path / "cursors.json",
+    )
+    driver = CopilotDriver("copilot", config)
+
+    metadata = driver.session_metadata(
+        datetime.now(timezone.utc) - timedelta(days=1)
+    )
+
+    assert metadata["session-1"]["models"] == ["claude-sonnet-5", "gpt-5.6-sol"]
+    assert metadata["session-1"]["transcript"] == "copilot/session-1/events.jsonl"
+
+
+def test_session_metadata_skips_files_older_than_the_window(tmp_path):
+    session_root = tmp_path / "copilot"
+    event_file = session_root / "session-1" / "events.jsonl"
+    event_file.parent.mkdir(parents=True)
+    event_file.write_text(
+        json.dumps({"type": "session.model_change", "data": {"newModel": "old"}})
+        + "\n",
+        encoding="utf-8",
+    )
+    config = SimpleNamespace(
+        COPILOT_SESSION_ROOT=session_root,
+        SESSION_CURSOR_PATH=tmp_path / "cursors.json",
+    )
+    driver = CopilotDriver("copilot", config)
+
+    assert driver.session_metadata(datetime.now(timezone.utc) + timedelta(days=1)) == {}

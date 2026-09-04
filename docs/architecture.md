@@ -133,6 +133,9 @@ shape:
 **Worth remembering**
 **Related commits**
 **Related project:** [[projects/<project>|<project>]]
+**Agent source:** [[agents/<Agent>|<Agent>]]
+**Models:** `<model>`
+**Session:** [[sessions/<agent>/<session-id>|<short-id>]]
 
 ## Related notes
 - [[daily_notes/YYYY-MM-DD|YYYY-MM-DD]]
@@ -142,6 +145,13 @@ The renderer never adds weather or a generic "today" introduction. It links
 daily notes to adjacent generated days and links technical sections to known
 projects and commits. Missing repository or commit metadata is left unlinked
 rather than guessed.
+
+A section carries a `**Session:**` link only when the work unit's session ID
+identifies exactly one recorded session. Copilot and Claude sessions are
+identified from their own records; Codex and Pi units fall back to a directory
+name that names a day or a working directory, so those sections keep the agent
+link alone. Models come from each transcript, so a session that switched model
+lists every model it used.
 
 ## Historical Workflows
 
@@ -178,6 +188,11 @@ manual and are never overwritten.
 <vault>/
   daily_notes/
     YYYY-MM-DD.md
+  agents/
+    <Agent>.md
+  sessions/
+    <agent>/
+      <session-id>.md
   projects/
     <project>.md
     <project>/
@@ -188,6 +203,11 @@ manual and are never overwritten.
       entities/
         ... existing legacy entity notes
 ```
+
+A session note is a stub, not a transcript: it records the agent, the session
+ID, the models used, and a vault-relative reference to the local session file.
+It is written once and never rewritten, so annotations added to it survive.
+Obsidian backlinks show every daily note that links to a session.
 
 The cleanup command removes obsolete event notes only when their JSON payload
 contains a session `narrative` and an empty `entities` list. It does not remove
