@@ -86,6 +86,9 @@ class DailyBackfillAgent:
             fields = result.stdout.split("\0")
             for index in range(0, len(fields) - 2, 3):
                 commit_id, timestamp, title = fields[index:index + 3]
+                # git log separates records with a newline, so every id after the
+                # first arrives with one attached and would break its wikilink.
+                commit_id = commit_id.strip()
                 try:
                     commit_time = datetime.fromisoformat(
                         timestamp.replace("Z", "+00:00")
