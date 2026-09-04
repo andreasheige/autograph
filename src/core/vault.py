@@ -4,6 +4,12 @@ import os
 import json
 from pathlib import Path
 from config.settings import Config
+from src.core.daily_note_renderer import (
+    SESSION_ID_PATTERN,
+    agent_label,
+    agent_note_link,
+    model_list,
+)
 
 class VaultManager:
     def __init__(self, vault_root=None):
@@ -108,6 +114,36 @@ class VaultManager:
         if context:
             content += f"\n## Session context\n\n{context}\n"
         commit_file.write_text(content, encoding="utf-8")
+
+    def write_session_note(self, source, session_id, models=None, transcript=None):
+        """Create a stable stub note for one agent session, for daily notes to link."""
+        safe_source = "".join(
+            character for character in source.lower() if character.isalnum()
+        )
+        # Session IDs come from local session files, so they never reach a path
+        # before passing the same check the daily-note link uses.
+        if not safe_source or not SESSION_ID_PATTERN.match(session_id):
+            return False
+
+        session_dir = self.vault_root / "sessions" / safe_source
+        session_file = session_dir / f"{session_id}.md"
+        if session_file.exists():
+            return False
+
+        content = (
+            f"# {agent_label(source)} session {session_id[:8]}\n\n"
+            f"- **Agent:** {agent_note_link(source)}\n"
+            f"- **Session:** `{session_id}`\n"
+        )
+        models_text = model_list(models)
+        if models_text:
+            content += f"- **Models:** {models_text}\n"
+        if transcript:
+            content += f"- **Transcript:** `{transcript}`\n"
+
+        session_dir.mkdir(parents=True, exist_ok=True)
+        session_file.write_text(content, encoding="utf-8")
+        return True
 
     def write_project_note(self, project_name):
         """Create a stable project hub for daily and commit note links."""

@@ -2,11 +2,11 @@ import os
 import subprocess
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Dict, Iterable, List
+from typing import Dict, Iterable, List, Tuple
 
 from config.settings import Config
 from src.agents.sync_agent import AutographSyncAgent
-from src.core.daily_note_renderer import render_daily_note
+from src.core.daily_note_renderer import render_daily_note, session_note_link
 from src.core.daily_note_state import DailyNoteState
 from src.core.drivers.jsonl_session_driver import (
     ClaudeDriver,
@@ -157,7 +157,13 @@ class DailyBackfillAgent:
             f"Remember: {section['remember']}"
         )
 
-    def _sections_for_units(self, date: str, units: List[WorkUnit]) -> List[Dict[str, object]]:
+    def _sections_for_units(
+        self,
+        date: str,
+        units: List[WorkUnit],
+        session_metadata: Dict[Tuple[str, str], Dict[str, object]] = None,
+    ) -> List[Dict[str, object]]:
+        session_metadata = session_metadata or {}
         sections = []
         for index, unit in enumerate(units, start=1):
             try:
@@ -168,8 +174,37 @@ class DailyBackfillAgent:
             section["project"] = unit.project
             section["source"] = unit.source
             section["commits"] = [commit.id for commit in unit.commits]
+            metadata = session_metadata.get((unit.source, unit.session_id))
+            if metadata is not None:
+                # Only identified sessions are linkable: codex and pi units fall
+                # back to a directory name that names a day or a cwd, not a session.
+                section["session_id"] = unit.session_id
+                section["models"] = metadata.get("models", [])
             sections.append(section)
         return sections
+
+    def _write_session_notes(
+        self,
+        sections: Iterable[Dict[str, object]],
+        session_metadata: Dict[Tuple[str, str], Dict[str, object]],
+    ) -> int:
+        """Create the session stubs the rendered daily note links to."""
+        written = 0
+        for section in sections:
+            source = section.get("source")
+            session_id = section.get("session_id")
+            if not isinstance(source, str) or not session_note_link(source, session_id):
+                continue
+            metadata = session_metadata.get((source, session_id), {})
+            written += bool(
+                self.vault_manager.write_session_note(
+                    source,
+                    str(session_id),
+                    metadata.get("models"),
+                    metadata.get("transcript"),
+                )
+            )
+        return written
 
     def run(
         self,
@@ -193,6 +228,10 @@ class DailyBackfillAgent:
         events = normalize_events(
             raw_events, repositories, JsonlSessionDriver._parse_timestamp
         )
+        session_metadata: Dict[Tuple[str, str], Dict[str, object]] = {}
+        for driver in self.drivers:
+            for session_id, metadata in driver.session_metadata(since).items():
+                session_metadata[(driver.source_name, session_id)] = metadata
         commits = self._commits_since(repositories, since, until)
         units_by_date = build_work_units(events, commits)
         commits_by_date: Dict[str, List[Commit]] = {}
@@ -232,9 +271,10 @@ class DailyBackfillAgent:
                 )
 
             print(f"📝 Generating {date} from {len(units)} work units.")
-            sections = self._sections_for_units(date, units)
+            sections = self._sections_for_units(date, units, session_metadata)
             if not sections:
                 continue
+            self._write_session_notes(sections, session_metadata)
             try:
                 summary = self.synthesizer.synthesize_day_overview(
                     date,

@@ -1,5 +1,9 @@
+import re
 from pathlib import Path
 from typing import Any, Dict, Iterable, List
+
+
+SESSION_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 
 
 def _clean_link_text(value: str) -> str:
@@ -25,7 +29,7 @@ def project_note_link(project: str) -> str:
     return f"[[projects/{clean_project}|{project}]]"
 
 
-def agent_note_link(source: str) -> str:
+def agent_label(source: str) -> str:
     labels = {
         "claude": "Claude",
         "codex": "Codex",
@@ -34,8 +38,27 @@ def agent_note_link(source: str) -> str:
         "pi": "Pi",
         "shell": "Shell",
     }
-    label = labels.get(source.lower(), source.title())
+    return labels.get(source.lower(), source.title())
+
+
+def agent_note_link(source: str) -> str:
+    label = agent_label(source)
     return f"[[agents/{label}|{label}]]"
+
+
+def session_note_link(source: str, session_id: object) -> str:
+    """Link a work unit to its session stub, when the id identifies one session."""
+    if source.lower() == "git" or not isinstance(session_id, str):
+        return ""
+    if session_id == "unknown-session" or not SESSION_ID_PATTERN.match(session_id):
+        return ""
+    return f"[[sessions/{source.lower()}/{session_id}|{session_id[:8]}]]"
+
+
+def model_list(models: object) -> str:
+    if not isinstance(models, list):
+        return ""
+    return ", ".join(f"`{model}`" for model in models if isinstance(model, str))
 
 
 def render_graph_connections(
@@ -139,6 +162,12 @@ def render_daily_note(
         source = section.get("source")
         if isinstance(source, str):
             lines.extend(["", f"**Agent source:** {agent_note_link(source)}"])
+            models = model_list(section.get("models"))
+            if models:
+                lines.extend(["", f"**Models:** {models}"])
+            session_link = session_note_link(source, section.get("session_id"))
+            if session_link:
+                lines.extend(["", f"**Session:** {session_link}"])
 
     related_links = [daily_note_link(related_date) for related_date in related_dates]
     if related_links:
