@@ -17,7 +17,7 @@ collection, bounded daily synthesis, linking, automation, and vault-sync design.
 
 * **📜 The Historian (Backfiller Agent):** A self-discovering agent that recursively scans your `AUTOGRAPH_SEARCH_DIR` for Git repositories. It performs a **Deep Inspection** of every commit—analyzing not just the commit message, but the exact files changed—to extract structured entities and relationships directly into Obsidian. It is intelligent enough to ignore "noise" like `node_modules` and `__pycache__`.
 * **📅 The Chronicler (Summary Agent):** An automated morning agent that aggregates all events from the last 24 hours, fetches local weather via `wttr.in`, and generates a human-readable daily journal entry.
-* **🧠 LLM-Powered Synthesis:** Uses **Ollama** (default: `deepseek-v3`) to perform semantic extraction and natural language summarization locally—keeping your data private and free.
+* **🧠 LLM-Powered Synthesis:** Uses **Ollama** (default: `gemma4:26b`) to perform semantic extraction and natural language summarization locally—keeping your data private and free.
 * **🛡️ Privacy First:** Everything runs locally. Your git logs, your `.env` configurations, and your LLM inference never leave your machine.
 * **🔌 Obsidian-Native:** Outputs directly to your Obsidian vault in structured Markdown, ready for linking and long-term knowledge storage.
 
@@ -43,7 +43,7 @@ Autograph operates using a clean separation between the **Engine** and the **Mem
 
 ### Prerequisites
 
-1.  **Ollama:** Installed and running (e.g., `ollama serve`) with the configured model available (for the default, run `ollama pull deepseek-v3`).
+1.  **Ollama:** Installed and running (e.g., `ollama serve`) with the configured model available (for the default, run `ollama pull gemma4:26b`).
 2.  **Python 3.9+**
 3.  **An Obsidian Vault:** A place to store your chronicles.
 
@@ -165,7 +165,7 @@ Autograph is entirely driven by environment variables. Never commit your `.env` 
 | :--- | :--- | :--- |
 | `AUTOGRAPH_VAULT_ROOT` | Absolute path to your Obsidian Vault | `~/.autograph/vault` |
 | `AUTOGRAPH_SEARCH_DIR` | Where to look for Git repositories | `~/projects` |
-| `AUTOGRAPH_MODEL_NAME` | The Ollama model to use | `deepseek-v3` |
+| `AUTOGRAPH_MODEL_NAME` | The Ollama model to use | `gemma4:26b` |
 | `AUTOGRAPH_OLLAMA_URL` | The local API endpoint for Ollama | `http://localhost:11434/api/generate` |
 | `AUTOGRAPH_OLLAMA_TIMEOUT_SECONDS` | Seconds to wait for an Ollama response | `300` |
 | `AUTOGRAPH_SESSION_DRIVERS` | Comma-separated session drivers to run | `shell,copilot,claude,codex,pi` |
