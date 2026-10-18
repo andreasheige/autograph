@@ -44,7 +44,7 @@ class Config:
     VAULT_ROOT = get_env_path("AUTOGRAPH_VAULT_ROOT", "~/.autograph/vault")
     
     # --- LLM Settings ---
-    MODEL_NAME = os.environ.get("AUTOGRAPH_MODEL_NAME", "deepseek-v3")
+    MODEL_NAME = os.environ.get("AUTOGRAPH_MODEL_NAME", "gemma4:26b")
     OLLAMA_API_URL = os.environ.get("AUTOGRAPH_OLLAMA_URL", "http://localhost:11434/api/generate")
     OLLAMA_REQUEST_TIMEOUT_SECONDS = get_env_positive_int(
         "AUTOGRAPH_OLLAMA_TIMEOUT_SECONDS", 300
