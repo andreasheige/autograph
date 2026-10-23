@@ -9,6 +9,7 @@ from src.core.daily_note_renderer import (
     agent_label,
     agent_note_link,
     model_list,
+    render_frontmatter,
 )
 
 class VaultManager:
@@ -104,7 +105,15 @@ class VaultManager:
             if marker in existing_content:
                 existing_context = existing_content.split(marker, 1)[1].strip()
         context = session_context.strip() if session_context else existing_context
-        content = (
+        frontmatter = render_frontmatter(
+            {
+                "type": "commit",
+                "date": date,
+                "project": project_name,
+                "commit": safe_commit_id,
+            }
+        )
+        content = "\n".join(frontmatter) + "\n\n" + (
             f"# {safe_commit_id[:12]} {title}\n\n"
             f"- **Commit:** `{safe_commit_id}`\n"
             f"- **Date:** {date}\n"
