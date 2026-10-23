@@ -117,6 +117,16 @@ Each generated note is stored at `daily_notes/YYYY-MM-DD.md` and has this
 shape:
 
 ```markdown
+---
+type: "daily-note"
+date: YYYY-MM-DD
+projects: ["<project>"]
+agents: ["<Agent>"]
+models: ["<model>"]
+commits: <count>
+generated_by: "autograph"
+---
+
 # Daily Journal: YYYY-MM-DD
 
 ## Day summary
@@ -140,6 +150,12 @@ shape:
 ## Related notes
 - [[daily_notes/YYYY-MM-DD|YYYY-MM-DD]]
 ```
+
+The properties come from work-unit and commit metadata, never from the model, so
+Obsidian Bases can filter days by project, agent or model. Commit notes carry
+`type`, `date`, `project` and `commit` the same way. Commit notes are rewritten
+on every backfill and pick up their properties then; daily notes get them only
+when regenerated with `--replace-generated`.
 
 The renderer never adds weather or a generic "today" introduction. It links
 daily notes to adjacent generated days and links technical sections to known

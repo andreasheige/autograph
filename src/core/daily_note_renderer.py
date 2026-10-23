@@ -1,9 +1,26 @@
+import json
 import re
 from pathlib import Path
 from typing import Any, Dict, Iterable, List
 
 
 SESSION_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+ISO_DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def render_frontmatter(fields: Dict[str, Any]) -> List[str]:
+    """Render YAML properties Obsidian can query; strings are JSON-quoted."""
+    lines = ["---"]
+    for key, value in fields.items():
+        if isinstance(value, list):
+            rendered = "[" + ", ".join(json.dumps(item) for item in value) + "]"
+        elif isinstance(value, int) or ISO_DATE_PATTERN.match(str(value)):
+            rendered = str(value)
+        else:
+            rendered = json.dumps(value)
+        lines.append(f"{key}: {rendered}")
+    lines.append("---")
+    return lines
 
 
 def _clean_link_text(value: str) -> str:
@@ -112,7 +129,39 @@ def render_daily_note(
         ],
         commits,
     )
-    lines = [
+    projects = {
+        project
+        for section in sections
+        if isinstance((project := section.get("project")), str)
+        and project != "unassigned"
+    }
+    projects.update(commit["project"] for commit in commits)
+    models = {
+        model
+        for section in sections
+        if isinstance(section.get("models"), list)
+        for model in section["models"]
+        if isinstance(model, str)
+    }
+    lines = render_frontmatter(
+        {
+            "type": "daily-note",
+            "date": date,
+            "projects": sorted(projects),
+            "agents": sorted(
+                {
+                    agent_label(source)
+                    for section in sections
+                    if isinstance((source := section.get("source")), str)
+                    and source.lower() != "git"
+                }
+            ),
+            "models": sorted(models),
+            "commits": len(commits),
+            "generated_by": "autograph",
+        }
+    ) + [
+        "",
         f"# Daily Journal: {date}",
         "",
         "## Day summary",
