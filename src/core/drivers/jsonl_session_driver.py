@@ -356,3 +356,11 @@ class PiDriver(JsonlSessionDriver):
     source_name = "pi"
     root_attribute = "PI_SESSION_ROOT"
     file_patterns = ("**/*.jsonl",)
+
+
+class ClaudeDesktopDriver(JsonlSessionDriver):
+    """Reads conversations the user explicitly saved from the Claude desktop app."""
+
+    source_name = "claudedesktop"
+    root_attribute = "DESKTOP_CAPTURE_ROOT"
+    file_patterns = ("*.jsonl",)
