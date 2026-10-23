@@ -15,6 +15,17 @@ def get_env_path(key, default_template):
     return Path(raw_path).expanduser().resolve()
 
 
+def get_env_path_list(key, default_template):
+    """
+    Retrieves an environment variable as a comma-separated list of expanded
+    Path objects (e.g. multiple project search roots). If the variable is not
+    found, returns a single-item list built from default_template.
+    """
+    raw_value = os.environ.get(key)
+    parts = raw_value.split(",") if raw_value is not None else [default_template]
+    return [Path(part.strip()).expanduser().resolve() for part in parts if part.strip()]
+
+
 def get_env_positive_int(key, default):
     """Read a positive integer environment variable."""
     value = os.environ.get(key)
@@ -51,7 +62,12 @@ class Config:
     )
 
     # --- Search Settings ---
-    SEARCH_DIR = get_env_path("AUTOGRAPH_SEARCH_DIR", "~/projects")
+    # AUTOGRAPH_SEARCH_DIR may list multiple roots, comma-separated (e.g. work
+    # spans two unrelated trees like ~/Dev and ~/Knowit). SEARCH_DIR stays the
+    # first root for callers that only ever expected a single path; SEARCH_DIRS
+    # is the full list for repository discovery in the daily-note pipeline.
+    SEARCH_DIRS = get_env_path_list("AUTOGRAPH_SEARCH_DIR", "~/projects")
+    SEARCH_DIR = SEARCH_DIRS[0]
 
     # --- Logging ---
     LOG_DIR = get_env_path("AUTOGRAPH_LOG_DIR", "~/.autograph/logs")
