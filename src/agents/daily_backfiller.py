@@ -18,6 +18,7 @@ from src.core.drivers.jsonl_session_driver import (
 )
 from src.core.synthesizer import Synthesizer, SynthesizerError
 from src.core.vault import VaultManager
+from src.core.vocabulary import ConceptIndex
 from src.core.work_units import (
     Commit,
     WorkUnit,
@@ -259,6 +260,7 @@ class DailyBackfillAgent:
             f"🔍 Retained {len(events)} meaningful events in "
             f"{sum(len(units) for units in units_by_date.values())} work units."
         )
+        concepts = ConceptIndex.load(self.vault_manager.vault_root)
         created = 0
         for date in target_dates:
             units = units_by_date[date]
@@ -282,6 +284,8 @@ class DailyBackfillAgent:
             sections = self._sections_for_units(date, units, session_metadata)
             if not sections:
                 continue
+            for section in sections:
+                concepts.annotate(section)
             self._write_session_notes(sections, session_metadata)
             try:
                 summary = self.synthesizer.synthesize_day_overview(

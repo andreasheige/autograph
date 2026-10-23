@@ -7,7 +7,7 @@ what they don't.
 ## Common commands
 
 ```bash
-python3 -m pytest tests/ -q              # full suite, quiet (51 tests, ~2s)
+python3 -m pytest tests/ -q              # full suite, quiet (58 tests, ~1s)
 python3 run_daily_backfill.py --days 7   # what the 08:00 launchd job runs
 ```
 
@@ -47,7 +47,9 @@ documented as cursor-free and is safe to call read-only.
 - **Renderer changes are invisible until a note regenerates.**
   `fingerprint_work_day` covers unit and commit content only, so changing
   `daily_note_renderer.py` does not invalidate state. Existing notes keep their
-  old shape until `--replace-generated` runs for those dates.
+  old shape until `--replace-generated` runs for those dates. The same holds
+  for `vocabulary.md` and wiki tags: editing them changes a note's `tags` and
+  **Related wiki** links only on regeneration.
 - **A work unit's evidence is capped at `MAX_UNIT_EVIDENCE`, silently.**
   `WorkUnit.prompt()` stops appending events once the formatted evidence
   passes 6000 chars — it truncates to a chronological prefix, it does not

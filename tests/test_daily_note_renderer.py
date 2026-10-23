@@ -146,6 +146,7 @@ def test_render_daily_note_starts_with_queryable_properties():
         "agents: [\"Claude\", \"Codex\"]\n"
         "models: [\"claude-opus-5\", \"claude-sonnet-5\"]\n"
         "commits: 1\n"
+        "tags: []\n"
         "generated_by: \"autograph\"\n"
         "---\n\n# Daily Journal: 2026-08-29\n"
     )
@@ -168,3 +169,24 @@ def test_write_commit_note_keeps_session_context_under_properties(tmp_path):
     )
     assert content.count("---\n") == 2
     assert content.endswith("## Session context\n\nContext.\n")
+
+
+def test_render_daily_note_tags_the_day_and_links_related_wiki_pages():
+    content = render_daily_note(
+        "2026-08-29",
+        "Validated the note workflow.",
+        [
+            {
+                "title": "Login",
+                "terms": ["bff", "entra"],
+                "wiki_pages": [("wiki/concepts/bff-login", "BFF [login] | proxy")],
+            },
+            {"title": "Tests", "terms": ["bff", "testing"], "wiki_pages": []},
+        ],
+        [],
+        [],
+    )
+
+    assert 'tags: ["bff", "entra", "testing"]\n' in content
+    assert "**Related wiki:** [[wiki/concepts/bff-login|BFF login - proxy]]" in content
+    assert content.count("**Related wiki:**") == 1
