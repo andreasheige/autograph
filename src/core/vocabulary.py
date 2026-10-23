@@ -6,14 +6,30 @@ as whole words, and a wiki page is related when it shares enough terms.
 """
 import re
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, Iterator, List, Optional, Set, Tuple
 
-# "- [x] term; alt: a, b; broader: parent", optionally followed by "<!-- n -->".
-TERM_PATTERN = re.compile(r"^- \[[xX]\] ([a-z0-9-]+)((?:;[^;<]*)*)")
+# "- [x] term; alt: a, b; scheme: id REF; def: text", optionally followed by
+# "<!-- note -->". Unticked lines are proposals; only ticked lines count.
+TERM_PATTERN = re.compile(r"^- \[([ xX])\] ([a-z0-9-]+)((?:;[^;<]*)*)")
+PROPOSALS_HEADING = "## Proposed by captures"
 FRONTMATTER_PATTERN = re.compile(r"\A---\n(.*?)\n---\n", re.S)
 WIKI_PAGE_FOLDERS = ("concepts", "entities")
 MIN_SHARED_TERMS = 2
 MAX_PAGES_PER_SECTION = 3
+
+
+def _entries(text: str) -> Iterator[Tuple[str, bool, Dict[str, str], List[str]]]:
+    """Yield (term, ticked, fields, alt labels) for every term line."""
+    for line in text.splitlines():
+        match = TERM_PATTERN.match(line)
+        if not match:
+            continue
+        fields = {}
+        for part in match.group(3).split(";")[1:]:
+            key, _, value = part.partition(":")
+            fields[key.strip()] = value.strip()
+        alts = [label.strip().lower() for label in fields.get("alt", "").split(",") if label.strip()]
+        yield match.group(2), match.group(1) != " ", fields, alts
 
 
 def parse_vocabulary(text: str) -> Dict[str, str]:
@@ -21,24 +37,51 @@ def parse_vocabulary(text: str) -> Dict[str, str]:
 
     `match: no` keeps a term valid as a wiki tag but out of prose matching, for
     common words ("setup", "process") that would otherwise tag every day.
+    Retired labels never match.
     """
     labels = {}
-    for line in text.splitlines():
-        match = TERM_PATTERN.match(line)
-        if not match:
+    for term, ticked, fields, alts in _entries(text):
+        if not ticked or "retired" in fields or fields.get("match") == "no":
             continue
-        fields = {}
-        for part in match.group(2).split(";"):
-            key, _, value = part.partition(":")
-            fields[key.strip()] = value.strip()
-        if fields.get("match") == "no":
-            continue
-        term = match.group(1)
-        labels[term] = term
-        for label in fields.get("alt", "").split(","):
-            if label.strip():
-                labels[label.strip().lower()] = term
+        for label in [term, *alts]:
+            labels[label] = term
     return labels
+
+
+def sort_tags(tags: List[str], text: str) -> Tuple[List[str], List[str], List[str]]:
+    """Split tags into (accepted terms, proposed tags, tags new to the vocabulary).
+
+    A ticked term or alt label becomes its preferred term; a ticked retired
+    label is dropped. Labels on unticked lines await the owner's decision, and
+    unknown labels are proposals the caller adds to the vocabulary.
+    """
+    known = {}
+    for term, ticked, fields, alts in _entries(text):
+        for label in [term, *alts]:
+            known.setdefault(label, (term, ticked, "retired" in fields))
+    accepted: List[str] = []
+    proposed: List[str] = []
+    new: List[str] = []
+    for tag in tags:
+        term, ticked, retired = known.get(tag, (tag, False, False))
+        if ticked and not retired and term not in accepted:
+            accepted.append(term)
+        elif not ticked and tag not in proposed:
+            proposed.append(tag)
+            if tag not in known:
+                new.append(tag)
+    return accepted, proposed, new
+
+
+def append_proposals(vocabulary: Path, labels: List[str], note: str) -> None:
+    """Add unticked proposal lines for the owner to review, under one heading."""
+    if not labels:
+        return
+    text = vocabulary.read_text(encoding="utf-8", errors="replace")
+    if PROPOSALS_HEADING not in text:
+        text = text.rstrip("\n") + f"\n\n{PROPOSALS_HEADING}\n"
+    lines = [f"- [ ] {label}  <!-- {note} -->" for label in labels]
+    vocabulary.write_text(text.rstrip("\n") + "\n" + "\n".join(lines) + "\n", encoding="utf-8")
 
 
 def _frontmatter(text: str) -> Dict[str, object]:

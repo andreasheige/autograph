@@ -26,6 +26,7 @@ from src.core.daily_note_renderer import (
     daily_note_link,
     project_note_link,
 )
+from src.core.vocabulary import append_proposals, sort_tags
 
 SOURCE = "claudedesktop"
 PROTOCOL_VERSION = "2025-06-18"
@@ -61,7 +62,16 @@ TOOL = {
                 "type": "string",
                 "description": "Repository or project name this relates to, if any.",
             },
-            "tags": {"type": "array", "items": {"type": "string"}},
+            "tags": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": (
+                    "Specific topic tags, lowercase kebab-case. Prefer established "
+                    "terms (SWEBOK, NIST SSDF, OWASP LLM/Agentic Top 10, DORA, MCP). "
+                    "They are checked against the vault vocabulary; unknown ones are "
+                    "kept as proposals for the owner to review."
+                ),
+            },
         },
         "required": ["title", "summary"],
     },
@@ -84,10 +94,11 @@ def _strings(values: Any) -> List[str]:
 
 
 def _tags(values: Any) -> List[str]:
-    tags = ["autograph-capture"]
+    """Normalize to the vocabulary's label shape: lowercase kebab-case."""
+    tags: List[str] = []
     for value in _strings(values):
-        tag = re.sub(r"[^A-Za-z0-9_/-]+", "-", value).strip("-")
-        if tag and tag not in tags:
+        tag = re.sub(r"[^a-z0-9-]+", "-", value.lower()).strip("-")
+        if tag and tag != "autograph-capture" and tag not in tags:
             tags.append(tag)
     return tags
 
@@ -123,6 +134,15 @@ def save_capture(arguments: Dict[str, Any], config: Any, now: Optional[datetime]
     open_questions = _strings(arguments.get("open_questions"))
     links = _strings(arguments.get("links"))
     tags = _tags(arguments.get("tags"))
+    proposed: List[str] = []
+    new_labels: List[str] = []
+    vocabulary = Path(config.VAULT_ROOT) / "vocabulary.md"
+    if vocabulary.is_file():
+        tags, proposed, new_labels = sort_tags(
+            tags, vocabulary.read_text(encoding="utf-8", errors="replace")
+        )
+    # autograph-capture marks where the note came from, so it is never sorted.
+    tags = ["autograph-capture"] + tags
 
     session_dir = Path(config.VAULT_ROOT) / "sessions" / SOURCE
     session_dir.mkdir(parents=True, exist_ok=True)
@@ -138,7 +158,10 @@ def save_capture(arguments: Dict[str, Any], config: Any, now: Optional[datetime]
     ]
     if project:
         header.append(f"project: {json.dumps(project)}")
-    header.extend([f"tags: [{', '.join(tags)}]", "---"])
+    header.append(f"tags: [{', '.join(tags)}]")
+    if proposed:
+        header.append(f"proposed_tags: [{', '.join(proposed)}]")
+    header.append("---")
     meta = (
         f"**Saved:** {local_now.strftime('%Y-%m-%d %H:%M')} · "
         f"**Agent:** {agent_note_link(SOURCE)} · **Day:** {daily_note_link(date)}"
@@ -151,6 +174,7 @@ def save_capture(arguments: Dict[str, Any], config: Any, now: Optional[datetime]
     lines += _section("Links", links)
     note_path = session_dir / f"{capture_id}.md"
     note_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    append_proposals(vocabulary, new_labels, f"proposed by {SOURCE} capture {capture_id} on {date}")
 
     content = [f"Saved Claude Desktop conversation: {title}", "", summary]
     if decisions:

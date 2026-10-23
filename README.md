@@ -191,6 +191,10 @@ Claude summarises the conversation and the tool writes:
    > At the start of a new conversation, ask once whether it should be saved to
    > Autograph. If yes, call `save_to_autograph` when we wrap up or when I say so.
 
+Tags are checked against the vault's `vocabulary.md`: known terms are kept,
+everything else lands in the note's `proposed_tags` and, if new, as an unticked
+proposal in the vocabulary for you to review.
+
 The tool replies with the note path, so you can see every save in the chat.
 The first time it runs, the app asks permission to use the tool; "Always allow"
 skips that afterwards.
