@@ -158,6 +158,15 @@ def render_daily_note(
             ),
             "models": sorted(models),
             "commits": len(commits),
+            "tags": sorted(
+                {
+                    term
+                    for section in sections
+                    if isinstance(section.get("terms"), list)
+                    for term in section["terms"]
+                    if isinstance(term, str)
+                }
+            ),
             "generated_by": "autograph",
         }
     ) + [
@@ -218,6 +227,12 @@ def render_daily_note(
             session_link = session_note_link(source, section.get("session_id"))
             if session_link:
                 lines.extend(["", f"**Session:** {session_link}"])
+        wiki_pages = section.get("wiki_pages")
+        if isinstance(wiki_pages, list) and wiki_pages:
+            links = [
+                f"[[{target}|{_clean_link_text(title)}]]" for target, title in wiki_pages
+            ]
+            lines.extend(["", "**Related wiki:** " + ", ".join(links)])
 
     related_links = [daily_note_link(related_date) for related_date in related_dates]
     if related_links:
