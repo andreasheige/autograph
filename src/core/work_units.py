@@ -9,6 +9,8 @@ from typing import Dict, Iterable, List, Optional, Tuple
 MAX_EVENT_CONTENT = 1600
 MAX_UNIT_EVIDENCE = 6000
 MAX_DAILY_WORK_UNITS = 20
+MAX_SESSION_WORK_UNITS = 5
+SESSION_GAP_THRESHOLD = timedelta(hours=1)
 COMMIT_ASSOCIATION_WINDOW = timedelta(hours=4)
 
 
@@ -129,6 +131,67 @@ def normalize_events(
     return sorted(normalized_events, key=lambda event: event["timestamp"])
 
 
+def _split_session_events(
+    events: List[Dict[str, object]],
+) -> List[List[Dict[str, object]]]:
+    """Break one session's events at idle gaps or once evidence would overflow.
+
+    A single Claude/Codex session can run continuously for many hours with no
+    idle gap at all, so gap detection alone doesn't bound unit size: split on
+    accumulated evidence length too, so no chunk's evidence exceeds what
+    WorkUnit.prompt() can actually pass to the synthesizer before truncating.
+    """
+    chunks: List[List[Dict[str, object]]] = []
+    current: List[Dict[str, object]] = []
+    current_length = 0
+    previous_timestamp = None
+    for event in events:
+        line_length = len(
+            f"[{event['timestamp'].isoformat()}] {event['source']} "
+            f"{event['role']}: {event['content']}"
+        )
+        idle = (
+            previous_timestamp is not None
+            and event["timestamp"] - previous_timestamp > SESSION_GAP_THRESHOLD
+        )
+        oversized = bool(current) and current_length + line_length > MAX_UNIT_EVIDENCE
+        if current and (idle or oversized):
+            chunks.append(current)
+            current = []
+            current_length = 0
+        current.append(event)
+        current_length += line_length
+        previous_timestamp = event["timestamp"]
+    if current:
+        chunks.append(current)
+    return chunks
+
+
+def _cap_units_per_day(units: List[WorkUnit]) -> List[WorkUnit]:
+    """Cap chunks per session first so one long session can't crowd out a day.
+
+    Splitting sessions into evidence-sized chunks can turn one long session
+    into far more than MAX_DAILY_WORK_UNITS candidates on its own. Keep each
+    session's own highest-scoring chunks before ranking across the whole day,
+    so other sessions that day still get a fair shot at the remaining slots.
+    """
+    by_session: Dict[Tuple[str, str, str], List[WorkUnit]] = {}
+    for unit in units:
+        by_session.setdefault((unit.project, unit.source, unit.session_id), []).append(
+            unit
+        )
+    survivors = [
+        unit
+        for group in by_session.values()
+        for unit in sorted(group, key=lambda unit: unit.score, reverse=True)[
+            :MAX_SESSION_WORK_UNITS
+        ]
+    ]
+    return sorted(survivors, key=lambda unit: unit.score, reverse=True)[
+        :MAX_DAILY_WORK_UNITS
+    ]
+
+
 def build_work_units(
     events: Iterable[Dict[str, object]], commits: Iterable[Commit]
 ) -> Dict[str, List[WorkUnit]]:
@@ -149,33 +212,34 @@ def build_work_units(
 
     units_by_date: Dict[str, List[WorkUnit]] = {}
     for (date, project, source, session_id), unit_events in groups.items():
-        unit = WorkUnit(
-            date=date,
-            project=project,
-            source=source,
-            session_id=session_id,
-            start=unit_events[0]["timestamp"],
-            end=unit_events[-1]["timestamp"],
-            events=[
-                {
-                    "timestamp": event["timestamp"].isoformat(),
-                    "source": str(event["source"]),
-                    "role": str(event["role"]),
-                    "content": str(event["content"]),
-                }
-                for event in unit_events
-            ],
-        )
-        candidates = [
-            commit
-            for commit in commits_by_date.get(date, [])
-            if commit.project == project and commit.timestamp >= unit.end
-        ]
-        if candidates:
-            nearest = min(candidates, key=lambda commit: commit.timestamp)
-            if nearest.timestamp - unit.end <= COMMIT_ASSOCIATION_WINDOW:
-                unit.commits = [nearest]
-        units_by_date.setdefault(date, []).append(unit)
+        for chunk_events in _split_session_events(unit_events):
+            unit = WorkUnit(
+                date=date,
+                project=project,
+                source=source,
+                session_id=session_id,
+                start=chunk_events[0]["timestamp"],
+                end=chunk_events[-1]["timestamp"],
+                events=[
+                    {
+                        "timestamp": event["timestamp"].isoformat(),
+                        "source": str(event["source"]),
+                        "role": str(event["role"]),
+                        "content": str(event["content"]),
+                    }
+                    for event in chunk_events
+                ],
+            )
+            candidates = [
+                commit
+                for commit in commits_by_date.get(date, [])
+                if commit.project == project and commit.timestamp >= unit.end
+            ]
+            if candidates:
+                nearest = min(candidates, key=lambda commit: commit.timestamp)
+                if nearest.timestamp - unit.end <= COMMIT_ASSOCIATION_WINDOW:
+                    unit.commits = [nearest]
+            units_by_date.setdefault(date, []).append(unit)
 
     for date, date_commits in commits_by_date.items():
         if date not in units_by_date:
@@ -200,10 +264,7 @@ def build_work_units(
                 for commit in date_commits
             ]
 
-    return {
-        date: sorted(units, key=lambda unit: unit.score, reverse=True)[:MAX_DAILY_WORK_UNITS]
-        for date, units in units_by_date.items()
-    }
+    return {date: _cap_units_per_day(units) for date, units in units_by_date.items()}
 
 
 def fingerprint_work_day(units: Iterable[WorkUnit], commits: Iterable[Commit]) -> str:
