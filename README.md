@@ -155,6 +155,46 @@ related vault folders:
 python3 run_vault_graph_index.py
 ```
 
+#### 8. Saving Claude Desktop Conversations
+Desktop chats are stored on claude.ai, not on disk, so Autograph only sees the
+ones you save. `run_desktop_capture_server.py` is a local MCP server with one
+tool, `save_to_autograph`. Say **"autograph this"** (or "save this") in a chat.
+Claude summarises the conversation and the tool writes:
+
+- a standalone note: `sessions/claudedesktop/<id>.md` in the vault
+- one event in `~/.autograph/desktop-captures/<date>.jsonl`, which the daily
+  backfill turns into a section that links to that note
+
+**Setup in the Claude desktop app**
+
+1. Settings → Developer → Edit Config. This opens
+   `~/Library/Application Support/Claude/claude_desktop_config.json`. Add:
+   ```json
+   {
+     "mcpServers": {
+       "autograph-capture": {
+         "command": "/usr/bin/python3",
+         "args": ["/Users/<you>/Dev/autograph_refactored/run_desktop_capture_server.py"]
+       }
+     }
+   }
+   ```
+   Merge this into the existing `mcpServers` object if there is one.
+2. Quit and reopen the app (⌘Q, not just closing the window). The tool appears
+   under the tools/connectors menu in the chat box.
+3. Settings → Profile → "What personal preferences should Claude consider…", add:
+   > When I say "autograph this", "save this" or "save this to Autograph", call
+   > the `save_to_autograph` tool with a summary of the whole conversation:
+   > findings, decisions, open questions and links to any artifacts. Set
+   > `project` to the repository name when the chat is about one.
+4. Optional, per Project (e.g. Research, Design), in the Project instructions:
+   > At the start of a new conversation, ask once whether it should be saved to
+   > Autograph. If yes, call `save_to_autograph` when we wrap up or when I say so.
+
+The tool replies with the note path, so you can see every save in the chat.
+The first time it runs, the app asks permission to use the tool; "Always allow"
+skips that afterwards.
+
 ---
 
 ## 🛠️ Configuration (`.env`)

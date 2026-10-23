@@ -9,6 +9,7 @@ from src.agents.sync_agent import AutographSyncAgent
 from src.core.daily_note_renderer import render_daily_note, session_note_link
 from src.core.daily_note_state import DailyNoteState
 from src.core.drivers.jsonl_session_driver import (
+    ClaudeDesktopDriver,
     ClaudeDriver,
     CodexDriver,
     CopilotDriver,
@@ -42,6 +43,7 @@ class DailyBackfillAgent:
             ClaudeDriver("claude", self.config),
             CodexDriver("codex", self.config),
             PiDriver("pi", self.config),
+            ClaudeDesktopDriver("claudedesktop", self.config),
         ]
 
     @staticmethod
