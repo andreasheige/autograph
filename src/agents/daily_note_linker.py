@@ -33,7 +33,7 @@ class DailyNoteLinker:
             raise ValueError("days must be a positive integer")
 
         since = datetime.now(timezone.utc) - timedelta(days=days)
-        repositories = self.daily_backfill._repositories(Config.SEARCH_DIR)
+        repositories = self.daily_backfill._repositories(Config.SEARCH_DIRS)
         raw_events = [
             event
             for driver in self.daily_backfill.drivers

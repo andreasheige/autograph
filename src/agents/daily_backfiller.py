@@ -45,17 +45,20 @@ class DailyBackfillAgent:
         ]
 
     @staticmethod
-    def _repositories(search_dir: Path) -> List[Path]:
+    def _repositories(search_dirs: Iterable[Path]) -> List[Path]:
+        if isinstance(search_dirs, Path):
+            search_dirs = [search_dirs]
         repositories = []
-        for root, directories, _ in os.walk(search_dir):
-            if ".git" in directories:
-                repositories.append(Path(root))
-                directories.remove(".git")
-            directories[:] = [
-                directory
-                for directory in directories
-                if directory not in {"node_modules", "__pycache__", ".venv"}
-            ]
+        for search_dir in search_dirs:
+            for root, directories, _ in os.walk(search_dir):
+                if ".git" in directories:
+                    repositories.append(Path(root))
+                    directories.remove(".git")
+                directories[:] = [
+                    directory
+                    for directory in directories
+                    if directory not in {"node_modules", "__pycache__", ".venv"}
+                ]
         return repositories
 
     @staticmethod
@@ -222,7 +225,7 @@ class DailyBackfillAgent:
         since = (until - timedelta(days=days)).replace(
             hour=0, minute=0, second=0, microsecond=0
         )
-        repositories = self._repositories(self.config.SEARCH_DIR)
+        repositories = self._repositories(self.config.SEARCH_DIRS)
         raw_events = [
             event
             for driver in self.drivers
