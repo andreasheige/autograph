@@ -160,14 +160,27 @@ on every backfill and pick up their properties then; daily notes get them only
 when regenerated with `--replace-generated`.
 
 `tags` and **Related wiki** come from `vocabulary.md` at the vault root, the
-controlled vocabulary a human owns: only ticked lines count, and nothing
-proposes or adds terms automatically. `src/core/vocabulary.py` matches ticked
-terms and their alt labels as whole words in each synthesized section, skipping
-terms marked `match: no` (common words that would tag every day). A wiki concept
-or entity page is linked when its own tags share at least two matched terms
-with the section, up to three pages per section. With no ticked terms, notes
-get `tags: []` and no wiki links. `~/.claude/scripts/wiki/wiki-lint.py` reads
-the same file to flag wiki tags that are alt labels or missing from it.
+controlled vocabulary a human owns: only ticked lines count. Each term names
+the standard that defines it (`scheme:`, e.g. SWEBOK, NIST SSDF, OWASP LLM and
+Agentic Top 10, DORA, MCP) and carries a one-line `def:`; `retired:` lines mark
+labels that no longer count. `src/core/vocabulary.py` matches ticked terms and
+their alt labels as whole words in each synthesized section, skipping retired
+lines and terms marked `match: no` (common words that would tag every day). A
+wiki concept or entity page is linked when its own tags share at least two
+matched terms with the section, up to three pages per section. With no ticked
+terms, notes get `tags: []` and no wiki links.
+
+The Desktop capture tool sorts its tags against the same file at save time:
+ticked terms and alt labels become `tags` (as the preferred term), ticked
+retired labels are dropped, and everything else goes to `proposed_tags`. A
+label the file doesn't know yet is also appended, unticked, under `## Proposed
+by captures`, so the owner decides on it like any other term. Nothing is ever
+ticked automatically.
+
+`~/.claude/scripts/wiki/wiki-lint.py` reads the file too: it flags wiki tags
+that are alt labels, retired or unknown, lists tags still waiting for a
+decision separately so ingest leaves those pages alone, and checks the file
+itself for duplicate labels, missing `def`/`scheme` and dangling `broader`.
 
 The renderer never adds weather or a generic "today" introduction. It links
 daily notes to adjacent generated days and links technical sections to known
