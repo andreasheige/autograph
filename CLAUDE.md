@@ -7,7 +7,7 @@ what they don't.
 ## Common commands
 
 ```bash
-python3 -m pytest tests/ -q              # full suite, quiet (32 tests, <1s)
+python3 -m pytest tests/ -q              # full suite, quiet (48 tests, <1s)
 python3 run_daily_backfill.py --days 7   # what the 08:00 launchd job runs
 ```
 
@@ -48,6 +48,22 @@ documented as cursor-free and is safe to call read-only.
   `fingerprint_work_day` covers unit and commit content only, so changing
   `daily_note_renderer.py` does not invalidate state. Existing notes keep their
   old shape until `--replace-generated` runs for those dates.
+- **A work unit's evidence is capped at `MAX_UNIT_EVIDENCE`, silently.**
+  `WorkUnit.prompt()` stops appending events once the formatted evidence
+  passes 6000 chars — it truncates to a chronological prefix, it does not
+  sample. A single long-running session used to become one `WorkUnit` no
+  matter how many hours it spanned, so a 12-hour, 1800-event session was
+  cut down to whatever fit in its first ~40 minutes before reaching the
+  synthesizer — everything after that was invisible to the LLM and never
+  made it into the note, even though the events were retained. Grouping in
+  `build_work_units` now runs unit_events through `_split_session_events`,
+  which starts a new chunk at an idle gap over `SESSION_GAP_THRESHOLD` **or**
+  once accumulated evidence would exceed `MAX_UNIT_EVIDENCE` — so a unit's
+  own prompt fits without truncation instead of dropping everything past the
+  cutoff. `_cap_units_per_day` then caps chunks per session
+  (`MAX_SESSION_WORK_UNITS`) before ranking the day, so a single long session
+  chunked into many candidates can't crowd out every other session that day
+  under `MAX_DAILY_WORK_UNITS`.
 - **Only Copilot and Claude session IDs identify a session.** Codex records carry
   `session_id` on `session_meta` alone and Pi on its `session` record alone, so
   every other record in those files falls back to `source_path.parent.name` —
@@ -64,8 +80,10 @@ documented as cursor-free and is safe to call read-only.
 
 | Constant | Value | Effect |
 |---|---|---|
-| `MAX_DAILY_WORK_UNITS` | 20 | Units kept per day, highest score first. Measured peak was 19/day; the previous 6 dropped ~2/3 of busy days. |
-| `MAX_UNIT_EVIDENCE` | 6000 | Chars of evidence per unit prompt. |
+| `MAX_DAILY_WORK_UNITS` | 20 | Units kept per day, highest score first, after the per-session cap below. Measured peak was 19/day pre-chunking; splitting long sessions into evidence-sized chunks means most busy days now hit this cap. |
+| `MAX_SESSION_WORK_UNITS` | 5 | Chunks kept per session per day, before the day cap. Without this, one long session split into many chunks could consume the whole day's cap and crowd out every other session. |
+| `SESSION_GAP_THRESHOLD` | 1h | Idle gap between events that starts a new chunk within one session, in `_split_session_events`. |
+| `MAX_UNIT_EVIDENCE` | 6000 | Chars of evidence per unit prompt. Also the size threshold `_split_session_events` chunks on, so a chunk's own evidence fits without `WorkUnit.prompt()` truncating it. |
 | `MAX_EVENT_CONTENT` | 1600 | Chars per event. |
 | `COMMIT_ASSOCIATION_WINDOW` | 4h | How long after a unit ends a commit can still attach to it. |
 

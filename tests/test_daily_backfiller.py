@@ -7,6 +7,9 @@ from src.core.daily_note_state import DailyNoteState
 from src.core.vault import VaultManager
 from src.core.work_units import (
     MAX_DAILY_WORK_UNITS,
+    MAX_SESSION_WORK_UNITS,
+    MAX_UNIT_EVIDENCE,
+    SESSION_GAP_THRESHOLD,
     Commit,
     WorkUnit,
     build_work_units,
@@ -80,6 +83,96 @@ def test_work_units_cap_the_number_selected_per_day():
     units = build_work_units(events, [])
 
     assert len(units["2026-08-29"]) == MAX_DAILY_WORK_UNITS
+
+
+def test_work_units_split_a_session_at_an_idle_gap():
+    timestamp = datetime(2026, 8, 29, 9, 0, tzinfo=timezone.utc)
+    events = [
+        {
+            "timestamp": timestamp,
+            "date": "2026-08-29",
+            "project": "project",
+            "source": "claude",
+            "session_id": "session-1",
+            "role": "user",
+            "content": "Morning work.",
+        },
+        {
+            "timestamp": timestamp + SESSION_GAP_THRESHOLD + timedelta(minutes=1),
+            "date": "2026-08-29",
+            "project": "project",
+            "source": "claude",
+            "session_id": "session-1",
+            "role": "user",
+            "content": "Evening work after a long break.",
+        },
+    ]
+
+    units = build_work_units(events, [])
+
+    assert [len(unit.events) for unit in units["2026-08-29"]] == [1, 1]
+
+
+def test_work_units_split_a_session_once_evidence_overflows():
+    timestamp = datetime(2026, 8, 29, 9, 0, tzinfo=timezone.utc)
+    long_content = "x" * (MAX_UNIT_EVIDENCE // 2 + 100)
+    events = [
+        {
+            "timestamp": timestamp + timedelta(seconds=index),
+            "date": "2026-08-29",
+            "project": "project",
+            "source": "claude",
+            "session_id": "session-1",
+            "role": "user",
+            "content": long_content,
+        }
+        for index in range(3)
+    ]
+
+    units = build_work_units(events, [])
+
+    day_units = units["2026-08-29"]
+    assert len(day_units) > 1
+    assert all(len(unit.events) < 3 for unit in day_units)
+    assert sum(len(unit.events) for unit in day_units) == 3
+
+
+def test_work_units_cap_chunks_per_session_before_the_day_cap():
+    timestamp = datetime(2026, 8, 29, 9, 0, tzinfo=timezone.utc)
+    # A gap beyond SESSION_GAP_THRESHOLD between every event forces one
+    # session to produce far more chunks than MAX_SESSION_WORK_UNITS.
+    dominant_session_events = [
+        {
+            "timestamp": timestamp + (SESSION_GAP_THRESHOLD + timedelta(minutes=1)) * index,
+            "date": "2026-08-29",
+            "project": "project",
+            "source": "claude",
+            "session_id": "dominant-session",
+            "role": "user",
+            "content": f"Chunk {index}",
+        }
+        for index in range(MAX_SESSION_WORK_UNITS + 5)
+    ]
+    other_session_events = [
+        {
+            "timestamp": timestamp + timedelta(minutes=index),
+            "date": "2026-08-29",
+            "project": "project",
+            "source": "claude",
+            "session_id": f"other-session-{index}",
+            "role": "user",
+            "content": f"Other work {index}",
+        }
+        for index in range(3)
+    ]
+
+    units = build_work_units(dominant_session_events + other_session_events, [])
+
+    day_units = units["2026-08-29"]
+    dominant_units = [unit for unit in day_units if unit.session_id == "dominant-session"]
+    other_units = [unit for unit in day_units if unit.session_id != "dominant-session"]
+    assert len(dominant_units) == MAX_SESSION_WORK_UNITS
+    assert len(other_units) == 3
 
 
 def test_daily_note_state_tracks_input_fingerprint(tmp_path):
