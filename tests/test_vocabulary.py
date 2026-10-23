@@ -1,4 +1,4 @@
-from src.core.vocabulary import ConceptIndex, parse_vocabulary
+from src.core.vocabulary import ConceptIndex, append_proposals, parse_vocabulary, sort_tags
 
 VOCABULARY = """# Vocabulary
 
@@ -78,3 +78,42 @@ def test_missing_vocabulary_adds_no_terms_or_links(tmp_path):
     assert section == {
         "title": "BFF", "work_done": "Entra and Kubernetes.", "terms": [], "wiki_pages": []
     }
+
+
+def test_retired_and_unticked_lines_never_match():
+    labels = parse_vocabulary(
+        "- [x] hooks; retired: collides with React hooks; use: claude-code-hooks\n"
+        "- [ ] clientco; alt: client-alt; scheme: local; def: A client\n"
+        "- [x] claude-code-hooks; scheme: claude-code; def: Hooks\n"
+    )
+
+    assert labels == {"claude-code-hooks": "claude-code-hooks"}
+
+
+def test_sort_tags_accepts_ticked_terms_and_proposes_the_rest():
+    text = (
+        "- [x] software-testing; alt: testing; scheme: swebok KA05; def: Testing\n"
+        "- [x] hooks; retired: too generic\n"
+        "- [ ] clientco; alt: client-alt; scheme: local; def: A client\n"
+    )
+
+    assert sort_tags(["testing", "software-testing", "hooks", "client-alt", "new-thing"], text) == (
+        ["software-testing"],
+        ["client-alt", "new-thing"],
+        ["new-thing"],
+    )
+
+
+def test_append_proposals_adds_the_heading_once(tmp_path):
+    vocabulary = tmp_path / "vocabulary.md"
+    vocabulary.write_text("# Vocabulary\n", encoding="utf-8")
+
+    append_proposals(vocabulary, ["a-term"], "proposed by x")
+    append_proposals(vocabulary, ["b-term"], "proposed by y")
+    append_proposals(vocabulary, [], "nothing")
+
+    assert vocabulary.read_text(encoding="utf-8") == (
+        "# Vocabulary\n\n## Proposed by captures\n"
+        "- [ ] a-term  <!-- proposed by x -->\n"
+        "- [ ] b-term  <!-- proposed by y -->\n"
+    )

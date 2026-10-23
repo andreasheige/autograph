@@ -92,3 +92,46 @@ def test_missing_summary_is_reported_not_raised(tmp_path):
 
     assert responses[0]["result"]["isError"] is True
     assert not config.DESKTOP_CAPTURE_ROOT.exists()
+
+
+def test_save_sorts_tags_against_the_vault_vocabulary(tmp_path):
+    config = _config(tmp_path)
+    config.VAULT_ROOT.mkdir(parents=True)
+    vocabulary = config.VAULT_ROOT / "vocabulary.md"
+    vocabulary.write_text(
+        "# Vocabulary\n\n"
+        "- [x] agent-harness; alt: harness-engineering; scheme: local; def: Harness\n"
+        "- [x] knowit; scheme: local; def: Employer\n"
+        "- [x] setup; retired: too generic; use: agent-harness\n"
+        "- [ ] client-brain; scheme: local; def: Client\n"
+        "\n## Proposed by captures\n\n"
+        "Unknown tags land here.\n",
+        encoding="utf-8",
+    )
+
+    responses = _run(
+        config,
+        _call(
+            {
+                "title": "Client kick-off",
+                "summary": "Straw-man architecture.",
+                "tags": ["Harness Engineering", "knowit", "setup", "client-brain",
+                         "AI architecture", "kick-off", "autograph-capture"],
+            }
+        ),
+    )
+
+    assert responses[0]["result"]["isError"] is False
+    note_path = next((config.VAULT_ROOT / "sessions" / "claudedesktop").glob("*.md"))
+    note = note_path.read_text(encoding="utf-8")
+    assert "tags: [autograph-capture, agent-harness, knowit]\n" in note
+    assert "proposed_tags: [client-brain, ai-architecture, kick-off]\n" in note
+    text = vocabulary.read_text(encoding="utf-8")
+    assert text.endswith(
+        "Unknown tags land here.\n"
+        f"- [ ] ai-architecture  <!-- proposed by claudedesktop capture {note_path.stem} on "
+        f"{note.split('date: ')[1][:10]} -->\n"
+        f"- [ ] kick-off  <!-- proposed by claudedesktop capture {note_path.stem} on "
+        f"{note.split('date: ')[1][:10]} -->\n"
+    )
+    assert text.count("client-brain") == 1
