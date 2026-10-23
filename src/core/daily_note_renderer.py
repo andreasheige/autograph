@@ -32,6 +32,7 @@ def project_note_link(project: str) -> str:
 def agent_label(source: str) -> str:
     labels = {
         "claude": "Claude",
+        "claudedesktop": "Claude Desktop",
         "codex": "Codex",
         "copilot": "Copilot",
         "ollama": "Ollama",

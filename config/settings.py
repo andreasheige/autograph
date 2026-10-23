@@ -82,6 +82,8 @@ class Config:
     CLAUDE_SESSION_ROOT = get_env_path("AUTOGRAPH_CLAUDE_SESSION_ROOT", "~/.claude")
     CODEX_SESSION_ROOT = get_env_path("AUTOGRAPH_CODEX_SESSION_ROOT", "~/.codex")
     PI_SESSION_ROOT = get_env_path("AUTOGRAPH_PI_SESSION_ROOT", "~/.pi/agent/sessions")
+    # Written by the desktop capture MCP server only when the user asks.
+    DESKTOP_CAPTURE_ROOT = get_env_path("AUTOGRAPH_DESKTOP_CAPTURE_ROOT", "~/.autograph/desktop-captures")
 
 # Ensure the basic logging directory exists immediately on import
 os.makedirs(Config.LOG_DIR, exist_ok=True)
