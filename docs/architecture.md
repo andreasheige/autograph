@@ -124,6 +124,7 @@ projects: ["<project>"]
 agents: ["<Agent>"]
 models: ["<model>"]
 commits: <count>
+tags: ["<vocabulary term>"]
 generated_by: "autograph"
 ---
 
@@ -146,6 +147,7 @@ generated_by: "autograph"
 **Agent source:** [[agents/<Agent>|<Agent>]]
 **Models:** `<model>`
 **Session:** [[sessions/<agent>/<session-id>|<short-id>]]
+**Related wiki:** [[wiki/concepts/<slug>|<title>]]
 
 ## Related notes
 - [[daily_notes/YYYY-MM-DD|YYYY-MM-DD]]
@@ -156,6 +158,16 @@ Obsidian Bases can filter days by project, agent or model. Commit notes carry
 `type`, `date`, `project` and `commit` the same way. Commit notes are rewritten
 on every backfill and pick up their properties then; daily notes get them only
 when regenerated with `--replace-generated`.
+
+`tags` and **Related wiki** come from `vocabulary.md` at the vault root, the
+controlled vocabulary a human owns: only ticked lines count, and nothing
+proposes or adds terms automatically. `src/core/vocabulary.py` matches ticked
+terms and their alt labels as whole words in each synthesized section, skipping
+terms marked `match: no` (common words that would tag every day). A wiki concept
+or entity page is linked when its own tags share at least two matched terms
+with the section, up to three pages per section. With no ticked terms, notes
+get `tags: []` and no wiki links. `~/.claude/scripts/wiki/wiki-lint.py` reads
+the same file to flag wiki tags that are alt labels or missing from it.
 
 The renderer never adds weather or a generic "today" introduction. It links
 daily notes to adjacent generated days and links technical sections to known
