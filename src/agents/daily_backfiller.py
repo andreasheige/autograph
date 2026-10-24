@@ -9,6 +9,7 @@ from src.agents.sync_agent import AutographSyncAgent
 from src.core.daily_note_renderer import render_daily_note, session_note_link
 from src.core.daily_note_state import DailyNoteState
 from src.core.drivers.jsonl_session_driver import (
+    ChatGPTDriver,
     ClaudeDesktopDriver,
     ClaudeDriver,
     CodexDriver,
@@ -45,6 +46,7 @@ class DailyBackfillAgent:
             CodexDriver("codex", self.config),
             PiDriver("pi", self.config),
             ClaudeDesktopDriver("claudedesktop", self.config),
+            ChatGPTDriver("chatgpt", self.config),
         ]
 
     @staticmethod
@@ -287,6 +289,9 @@ class DailyBackfillAgent:
             for section in sections:
                 concepts.annotate(section)
             self._write_session_notes(sections, session_metadata)
+            for source in {section.get("source") for section in sections}:
+                if isinstance(source, str) and source != "git":
+                    self.vault_manager.write_agent_note(source)
             try:
                 summary = self.synthesizer.synthesize_day_overview(
                     date,

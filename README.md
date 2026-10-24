@@ -208,6 +208,23 @@ The tool replies with the note path, so you can see every save in the chat.
 The first time it runs, the app asks permission to use the tool; "Always allow"
 skips that afterwards.
 
+#### 10. Importing ChatGPT Conversations
+ChatGPT keeps conversations on OpenAI's servers, and it can only reach MCP servers on
+the internet, so a local save tool like the one above isn't possible. Export your data
+instead (ChatGPT → Settings → Data controls → Export data), then:
+```bash
+python3 run_chatgpt_import.py ~/Downloads/<export>.zip
+```
+This writes one JSONL file per conversation to `~/.autograph/chatgpt-imports` and nothing
+to the vault. The next daily backfill turns conversations from its window into sections
+under the **ChatGPT** agent. Only the branch each conversation ended on counts, so answers
+you regenerated away are skipped, and system messages and custom instructions are
+dropped. Importing a newer export updates conversations in place. To cover older days,
+run `run_daily_backfill.py` with a wider `--days`; that costs one Ollama call per work unit.
+
+Codex desktop app sessions need no setup: they're in `~/.codex/sessions` with the CLI's,
+and are labelled **Codex Desktop** from the `originator` in each session file.
+
 ---
 
 ## 🛠️ Configuration (`.env`)
@@ -228,6 +245,7 @@ Autograph is entirely driven by environment variables. Never commit your `.env` 
 | `AUTOGRAPH_CLAUDE_SESSION_ROOT` | Claude Code session directory | `~/.claude` |
 | `AUTOGRAPH_CODEX_SESSION_ROOT` | Codex CLI session directory | `~/.codex` |
 | `AUTOGRAPH_PI_SESSION_ROOT` | Pi session directory | `~/.pi/agent/sessions` |
+| `AUTOGRAPH_CHATGPT_IMPORT_ROOT` | Where `run_chatgpt_import.py` writes ChatGPT conversations | `~/.autograph/chatgpt-imports` |
 | `AUTOGRAPH_LOG_DIR` | Where to store system logs | `~/.autograph/logs` |
 
 The observer enables Shell, Copilot CLI, Claude Code, Codex CLI, and Pi drivers by default.

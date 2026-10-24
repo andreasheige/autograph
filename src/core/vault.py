@@ -124,6 +124,28 @@ class VaultManager:
             content += f"\n## Session context\n\n{context}\n"
         commit_file.write_text(content, encoding="utf-8")
 
+    AGENT_DESCRIPTIONS = {
+        "chatgpt": "ChatGPT conversations imported from a ChatGPT data export.",
+        "claudedesktop": "Claude desktop app conversations saved with \"autograph this\".",
+        "codexdesktop": "Codex desktop app session activity captured by Autograph.",
+    }
+
+    def write_agent_note(self, source):
+        """Create the agent hub a daily note's **Agent source:** link points to."""
+        label = agent_label(source)
+        agent_file = self.vault_root / "agents" / f"{label}.md"
+        if agent_file.exists():
+            return False
+        description = self.AGENT_DESCRIPTIONS.get(
+            source.lower(), f"{label} session activity captured by Autograph."
+        )
+        agent_file.parent.mkdir(parents=True, exist_ok=True)
+        agent_file.write_text(
+            f"# {label}\n\n{description}\n\n## Related notes\n\n- {agent_note_link('ollama')}\n",
+            encoding="utf-8",
+        )
+        return True
+
     def write_session_note(self, source, session_id, models=None, transcript=None):
         """Create a stable stub note for one agent session, for daily notes to link."""
         safe_source = "".join(
