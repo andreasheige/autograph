@@ -1,4 +1,3 @@
-import os
 import subprocess
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -16,6 +15,7 @@ from src.core.drivers.jsonl_session_driver import (
     JsonlSessionDriver,
     PiDriver,
 )
+from src.core.projects import find_repositories, project_groups
 from src.core.synthesizer import Synthesizer, SynthesizerError
 from src.core.vault import VaultManager
 from src.core.vocabulary import ConceptIndex
@@ -52,20 +52,7 @@ class DailyBackfillAgent:
 
     @staticmethod
     def _repositories(search_dirs: Iterable[Path]) -> List[Path]:
-        if isinstance(search_dirs, Path):
-            search_dirs = [search_dirs]
-        repositories = []
-        for search_dir in search_dirs:
-            for root, directories, _ in os.walk(search_dir):
-                if ".git" in directories:
-                    repositories.append(Path(root))
-                    directories.remove(".git")
-                directories[:] = [
-                    directory
-                    for directory in directories
-                    if directory not in {"node_modules", "__pycache__", ".venv"}
-                ]
-        return repositories
+        return find_repositories(search_dirs)
 
     @staticmethod
     def _commits_since(
@@ -236,7 +223,9 @@ class DailyBackfillAgent:
             hour=0, minute=0, second=0, microsecond=0
         )
         repositories = self._repositories(self.config.SEARCH_DIRS)
-        groups = self.config.PROJECT_GROUPS
+        groups = project_groups(
+            repositories, self.config.SEARCH_DIRS, self.config.PROJECT_GROUPS
+        )
         # Every repository on disk gets a hub, so Projects lists all of them,
         # not only those worked in during this window.
         projects = sorted({project_name(repository, groups) for repository in repositories})
