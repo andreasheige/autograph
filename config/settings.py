@@ -68,6 +68,9 @@ class Config:
     # is the full list for repository discovery in the daily-note pipeline.
     SEARCH_DIRS = get_env_path_list("AUTOGRAPH_SEARCH_DIR", "~/projects")
     SEARCH_DIR = SEARCH_DIRS[0]
+    # Folders whose repositories are one project, named after the folder: e.g.
+    # a client folder holding DEV/TEST/PROD clones of the same code.
+    PROJECT_GROUPS = get_env_path_list("AUTOGRAPH_PROJECT_GROUPS", "")
 
     # --- Logging ---
     LOG_DIR = get_env_path("AUTOGRAPH_LOG_DIR", "~/.autograph/logs")
