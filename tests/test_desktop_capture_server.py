@@ -14,6 +14,7 @@ def _config(tmp_path):
         VAULT_ROOT=tmp_path / "vault",
         DESKTOP_CAPTURE_ROOT=tmp_path / "captures",
         SEARCH_DIRS=[tmp_path / "dev"],
+        PROJECT_GROUPS=[],
         SESSION_CURSOR_PATH=tmp_path / "cursors.json",
     )
 

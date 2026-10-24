@@ -103,7 +103,9 @@ def _tags(values: Any) -> List[str]:
     return tags
 
 
-def _project_cwd(project: Optional[str], search_dirs: Iterable[Path]) -> Optional[str]:
+def _project_cwd(
+    project: Optional[str], search_dirs: Iterable[Path], groups: Iterable[Path] = ()
+) -> Optional[str]:
     """Point the event at a repository so the daily note can attribute it."""
     if not project:
         return None
@@ -111,6 +113,9 @@ def _project_cwd(project: Optional[str], search_dirs: Iterable[Path]) -> Optiona
         candidate = Path(search_dir) / project
         if (candidate / ".git").exists():
             return str(candidate)
+    for group in groups:
+        if group.name == project:
+            return str(group)
     return None
 
 
@@ -186,7 +191,7 @@ def save_capture(arguments: Dict[str, Any], config: Any, now: Optional[datetime]
         "timestamp": now.isoformat(),
         "session_id": capture_id,
         "role": "user",
-        "cwd": _project_cwd(project, config.SEARCH_DIRS),
+        "cwd": _project_cwd(project, config.SEARCH_DIRS, config.PROJECT_GROUPS),
         "content": "\n".join(content),
     }
     capture_root = Path(config.DESKTOP_CAPTURE_ROOT)

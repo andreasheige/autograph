@@ -187,6 +187,14 @@ that are alt labels, retired or unknown, lists tags still waiting for a
 decision separately so ingest leaves those pages alone, and checks the file
 itself for duplicate labels, missing `def`/`scheme` and dangling `broader`.
 
+Every repository under `AUTOGRAPH_SEARCH_DIR` gets a project hub at
+`projects/<name>.md` on each daily run, whether or not it saw work that week, and
+`projects/Index.md` lists every hub. A project is named after its repository
+folder, except inside a folder listed in `AUTOGRAPH_PROJECT_GROUPS`: there every
+repository, and work in the group folder itself, belongs to one project named
+after the group. Two repositories with the same folder name in different roots
+share a project.
+
 The renderer never adds weather or a generic "today" introduction. It links
 daily notes to adjacent generated days and links technical sections to known
 projects and commits. Missing repository or commit metadata is left unlinked

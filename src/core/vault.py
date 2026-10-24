@@ -159,13 +159,16 @@ class VaultManager:
         safe_project_name = project_name.replace(" ", "_").replace("/", "_").replace(":", "")
         project_file = self.vault_root / "projects" / f"{safe_project_name}.md"
         if project_file.exists():
-            return
+            return False
+        project_file.parent.mkdir(parents=True, exist_ok=True)
+        # No links to the commits folder: Obsidian can't open a folder link and
+        # creates an empty note there instead. Backlinks list the daily notes.
         project_file.write_text(
             f"# {project_name}\n\n"
-            f"- **Commits:** [[projects/{safe_project_name}/commits]]\n"
-            f"- **Events:** [[projects/{safe_project_name}/events]]\n",
+            "Daily notes and commit notes for this project link here: see Backlinks.\n",
             encoding="utf-8",
         )
+        return True
 
     def find_recent_events(self):
         """Helper for Daily Summary Agent to find events from the last 24 hours."""

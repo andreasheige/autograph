@@ -69,6 +69,12 @@ documented as cursor-free and is safe to call read-only.
   (`MAX_SESSION_WORK_UNITS`) before ranking the day, so a single long session
   chunked into many candidates can't crowd out every other session that day
   under `MAX_DAILY_WORK_UNITS`.
+- **A project is a repository folder name, or an `AUTOGRAPH_PROJECT_GROUPS`
+  folder name.** Changing either setting changes which project a unit belongs
+  to, and so the fingerprint of every day in the window that had work there:
+  the next run regenerates those days with Ollama. Project grouping is
+  explicit because a generic rule ("a non-repo folder holding several repos")
+  would also swallow `capio-plattfrom`, whose repos are separate projects.
 - **Only Copilot and Claude session IDs identify a session.** Codex records carry
   `session_id` on `session_meta` alone and Pi on its `session` record alone, so
   every other record in those files falls back to `source_path.parent.name` —
