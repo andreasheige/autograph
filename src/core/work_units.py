@@ -5,12 +5,16 @@ import re
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
 
+from src.core.usage import Usage
+
 
 MAX_EVENT_CONTENT = 1600
 MAX_UNIT_EVIDENCE = 6000
 MAX_DAILY_WORK_UNITS = 20
 MAX_SESSION_WORK_UNITS = 5
 SESSION_GAP_THRESHOLD = timedelta(hours=1)
+# Longer pauses between a session's messages don't count as time spent in it.
+ACTIVE_GAP_THRESHOLD = timedelta(minutes=15)
 COMMIT_ASSOCIATION_WINDOW = timedelta(hours=4)
 
 
@@ -300,3 +304,45 @@ def fingerprint_work_day(units: Iterable[WorkUnit], commits: Iterable[Commit]) -
         for commit in commits
     )
     return sha256("\n".join(sorted(lines)).encode("utf-8")).hexdigest()
+
+
+@dataclass
+class SessionDay:
+    """One session's activity on one date: time spent and API usage."""
+
+    minutes: int = 0
+    usage: Usage = field(default_factory=Usage)
+
+
+def session_day_totals(
+    events: Iterable[Dict[str, object]], usage: Iterable[Dict[str, object]]
+) -> Dict[Tuple[str, str, str], SessionDay]:
+    """Totals per (date, source, session id) over every event and API response.
+
+    Covers whole sessions, including the parts the daily cap leaves out of a note.
+    Time is the sum of the pauses between consecutive activity that are at most
+    ACTIVE_GAP_THRESHOLD; API responses count as activity, since tool calls carry
+    no text events.
+    """
+    moments: Dict[Tuple[str, str, str], List[datetime]] = {}
+    totals: Dict[Tuple[str, str, str], SessionDay] = {}
+    for event in events:
+        key = (str(event["date"]), str(event["source"]), str(event["session_id"]))
+        moments.setdefault(key, []).append(event["timestamp"])
+    for record in usage:
+        timestamp = record["timestamp"]
+        key = (timestamp.date().isoformat(), str(record["source"]), str(record["session_id"]))
+        moments.setdefault(key, []).append(timestamp)
+        totals.setdefault(key, SessionDay()).usage.add(record["usage"])
+    for key, timestamps in moments.items():
+        timestamps.sort()
+        active = sum(
+            (
+                later - earlier
+                for earlier, later in zip(timestamps, timestamps[1:])
+                if later - earlier <= ACTIVE_GAP_THRESHOLD
+            ),
+            timedelta(),
+        )
+        totals.setdefault(key, SessionDay()).minutes = round(active.total_seconds() / 60)
+    return totals
