@@ -245,6 +245,102 @@ def render_daily_note(
     return "\n".join(lines) + "\n"
 
 
+FRONTMATTER_BLOCK = re.compile(r"\A---\n.*?\n---\n\n?", re.S)
+PROJECT_LINK = re.compile(r"\*\*Related project:\*\* \[\[projects/[^|\]]+\|([^\]]+)\]\]")
+COMMIT_LINK = re.compile(r"\[\[projects/([^/|\]]+)/commits/([A-Za-z0-9]+)\|")
+AGENT_LINK = re.compile(r"\[\[agents/[^|\]]+\|([^\]]+)\]\]")
+SECTION_METADATA = ("**Related ", "**Agent source:**", "**Models:**", "**Session:**")
+
+
+def retrofit_daily_note(content: str, date: str, annotate) -> str:
+    """Give an existing generated note the properties and wiki links of a new one.
+
+    Everything is read back from the note itself, so old days whose sessions
+    are no longer on disk need no regeneration and no model call. `annotate`
+    is `ConceptIndex.annotate`. Prior Autograph frontmatter and **Related wiki**
+    lines are replaced, so a rerun after a vocabulary edit refreshes them.
+    """
+    existing = FRONTMATTER_BLOCK.match(content)
+    if existing:
+        if 'generated_by: "autograph"' not in existing.group(0):
+            raise ValueError("Daily note has frontmatter Autograph did not write")
+        content = content[existing.end():]
+
+    lines = [line for line in content.split("\n") if not line.startswith("**Related wiki:**")]
+    output: List[str] = []
+    tags = set()
+    index = 0
+    while index < len(lines):
+        if not lines[index].startswith("### "):
+            output.append(lines[index])
+            index += 1
+            continue
+        end = index + 1
+        while end < len(lines) and not lines[end].startswith(("### ", "## ")):
+            end += 1
+        body = lines[index:end]
+        while len(body) > 1 and not body[-1].strip():
+            body.pop()
+        prose = []
+        for line in body[1:]:
+            if line.startswith(SECTION_METADATA):
+                break
+            if not (line.startswith("**") and line.endswith("**")):
+                prose.append(line)
+        section: Dict[str, Any] = {"title": body[0][4:], "work_done": " ".join(prose)}
+        annotate(section)
+        tags.update(section["terms"])
+        output.extend(body)
+        if section["wiki_pages"]:
+            links = [
+                f"[[{target}|{_clean_link_text(title)}]]"
+                for target, title in section["wiki_pages"]
+            ]
+            output.extend(["", "**Related wiki:** " + ", ".join(links)])
+        output.append("")
+        index = end
+    body_text = "\n".join(output)
+
+    agents = {
+        match
+        for line in body_text.split("\n")
+        if line.startswith("**Agent source:**")
+        for match in AGENT_LINK.findall(line)
+    }
+    if not agents:
+        # Notes from before per-section agent lines name them only here, next
+        # to Ollama, which every note lists as its synthesizer.
+        agents = {
+            match
+            for line in body_text.split("\n")
+            if line.startswith("- **Agents:**")
+            for match in AGENT_LINK.findall(line)
+            if match != "Ollama"
+        }
+    commits = COMMIT_LINK.findall(body_text)
+    projects = set(PROJECT_LINK.findall(body_text))
+    projects.update(project for project, _ in commits)
+    models = {
+        model
+        for line in body_text.split("\n")
+        if line.startswith("**Models:**")
+        for model in re.findall(r"`([^`]+)`", line)
+    }
+    frontmatter = render_frontmatter(
+        {
+            "type": "daily-note",
+            "date": date,
+            "projects": sorted(projects),
+            "agents": sorted(agents),
+            "models": sorted(models),
+            "commits": len({commit_id for _, commit_id in commits}),
+            "tags": sorted(tags),
+            "generated_by": "autograph",
+        }
+    )
+    return "\n".join(frontmatter) + "\n\n" + body_text
+
+
 def related_daily_dates(notes_dir: Path, date: str) -> List[str]:
     """Find the immediately adjacent existing daily notes for navigation."""
     dates = sorted(

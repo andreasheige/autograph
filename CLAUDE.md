@@ -7,7 +7,7 @@ what they don't.
 ## Common commands
 
 ```bash
-python3 -m pytest tests/ -q              # full suite, quiet (62 tests, ~1s)
+python3 -m pytest tests/ -q              # full suite, quiet (68 tests, ~1s)
 python3 run_daily_backfill.py --days 7   # what the 08:00 launchd job runs
 ```
 
@@ -48,8 +48,11 @@ documented as cursor-free and is safe to call read-only.
   `fingerprint_work_day` covers unit and commit content only, so changing
   `daily_note_renderer.py` does not invalidate state. Existing notes keep their
   old shape until `--replace-generated` runs for those dates. The same holds
-  for `vocabulary.md` and wiki tags: editing them changes a note's `tags` and
-  **Related wiki** links only on regeneration.
+  for `vocabulary.md` and wiki tags, except that `run_daily_note_retrofit.py`
+  refreshes `tags`, frontmatter and **Related wiki** links in place, without
+  Ollama. It reads everything back out of the note, so keep the renderer's
+  section labels (`**Related project:**`, `**Agent source:**`, `**Models:**`)
+  stable, or teach `retrofit_daily_note` the new ones.
 - **A work unit's evidence is capped at `MAX_UNIT_EVIDENCE`, silently.**
   `WorkUnit.prompt()` stops appending events once the formatted evidence
   passes 6000 chars — it truncates to a chronological prefix, it does not
