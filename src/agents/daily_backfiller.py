@@ -56,8 +56,8 @@ class DailyBackfillAgent:
         ]
 
     @staticmethod
-    def _repositories(search_dirs: Iterable[Path]) -> List[Path]:
-        return find_repositories(search_dirs)
+    def _repositories(search_dirs: Iterable[Path], excluded: Iterable[Path] = ()) -> List[Path]:
+        return find_repositories(search_dirs, excluded)
 
     @staticmethod
     def _commits_since(
@@ -256,7 +256,7 @@ class DailyBackfillAgent:
         since = (until - timedelta(days=days)).replace(
             hour=0, minute=0, second=0, microsecond=0
         )
-        repositories = self._repositories(self.config.SEARCH_DIRS)
+        repositories = self._repositories(self.config.SEARCH_DIRS, self.config.EXCLUDED_PATHS)
         groups = project_groups(
             repositories, self.config.SEARCH_DIRS, self.config.PROJECT_GROUPS
         )
@@ -273,6 +273,7 @@ class DailyBackfillAgent:
             raw_events,
             project_roots(repositories, groups),
             JsonlSessionDriver._parse_timestamp,
+            self.config.EXCLUDED_PATHS,
         )
         session_metadata: Dict[Tuple[str, str], Dict[str, object]] = {}
         for driver in self.drivers:

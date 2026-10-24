@@ -7,7 +7,7 @@ what they don't.
 ## Common commands
 
 ```bash
-python3 -m pytest tests/ -q              # full suite, quiet (85 tests, ~1s)
+python3 -m pytest tests/ -q              # full suite, quiet (86 tests, ~1s)
 python3 run_daily_backfill.py --days 7   # what the 08:00 launchd job runs
 ```
 
@@ -84,6 +84,14 @@ documented as cursor-free and is safe to call read-only.
   `client-frontend`. A new group, a new search root or `AUTOGRAPH_PROJECT_GROUPS`
   changes which project units belong to, and so the fingerprint of every day
   in the window with work there: the next run regenerates those with Ollama.
+- **An excluded folder drops its events, it doesn't unassign them.**
+  `AUTOGRAPH_EXCLUDE_PATHS` prunes repository discovery and makes
+  `normalize_events` skip any event whose cwd is inside it. Leaving those
+  events as `unassigned` would still put their content in a daily note. It
+  matches on cwd only, so work about the client done from another folder is
+  still captured, and a Desktop capture the user saves still writes its own
+  session note. Adding or removing a folder changes the fingerprint of every
+  day in the window with work there, so those days regenerate once.
 - **Only Copilot and Claude session IDs identify a session.** Codex records carry
   `session_id` on `session_meta` alone and Pi on its `session` record alone, so
   every other record in those files falls back to `source_path.parent.name` —

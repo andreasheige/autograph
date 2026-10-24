@@ -5,6 +5,7 @@ import re
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
 
+from src.core.projects import is_excluded
 from src.core.usage import Usage
 
 
@@ -115,14 +116,32 @@ def _project_for_cwd(cwd: object, repositories: Iterable[Path]) -> str:
     return "unassigned"
 
 
+def _cwd_excluded(cwd: object, excluded: Iterable[Path]) -> bool:
+    if not excluded or not isinstance(cwd, str) or not cwd.strip():
+        return False
+    try:
+        return is_excluded(Path(cwd).expanduser().resolve(), excluded)
+    except OSError:
+        return False
+
+
 def normalize_events(
-    events: Iterable[Dict[str, object]], repositories: Iterable[Path], parse_timestamp
+    events: Iterable[Dict[str, object]],
+    repositories: Iterable[Path],
+    parse_timestamp,
+    excluded: Iterable[Path] = (),
 ) -> List[Dict[str, object]]:
-    """Retain unique, human-authored session messages with useful context."""
+    """Retain unique, human-authored session messages with useful context.
+
+    Events whose cwd lies in an excluded folder are dropped, not unassigned.
+    """
     repositories = list(repositories)
+    excluded = list(excluded)
     normalized_events = []
     seen = set()
     for event in events:
+        if _cwd_excluded(event.get("cwd"), excluded):
+            continue
         timestamp = parse_timestamp(event.get("timestamp"))
         content = _normalize_content(event.get("content"))
         if timestamp is None or content is None:
