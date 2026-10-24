@@ -34,7 +34,7 @@ class DailyNoteLinker:
             raise ValueError("days must be a positive integer")
 
         since = datetime.now(timezone.utc) - timedelta(days=days)
-        repositories = self.daily_backfill._repositories(Config.SEARCH_DIRS)
+        repositories = self.daily_backfill._repositories(Config.SEARCH_DIRS, Config.EXCLUDED_PATHS)
         groups = project_groups(repositories, Config.SEARCH_DIRS, Config.PROJECT_GROUPS)
         raw_events = [
             event
@@ -45,6 +45,7 @@ class DailyNoteLinker:
             raw_events,
             project_roots(repositories, groups),
             JsonlSessionDriver._parse_timestamp,
+            Config.EXCLUDED_PATHS,
         )
         commits = self.daily_backfill._commits_since(
             repositories, since, datetime.now(timezone.utc), groups

@@ -7,12 +7,21 @@ from typing import Dict, Iterable, List, Set
 SKIPPED_DIRECTORIES = {"node_modules", "__pycache__", ".venv"}
 
 
-def find_repositories(search_dirs: Iterable[Path]) -> List[Path]:
+def is_excluded(path: Path, excluded: Iterable[Path]) -> bool:
+    """Whether path is one of the excluded folders or lies inside one."""
+    return any(path == folder or folder in path.parents for folder in excluded)
+
+
+def find_repositories(search_dirs: Iterable[Path], excluded: Iterable[Path] = ()) -> List[Path]:
     if isinstance(search_dirs, Path):
         search_dirs = [search_dirs]
+    excluded = list(excluded)
     repositories = []
     for search_dir in search_dirs:
         for root, directories, _ in os.walk(search_dir):
+            if is_excluded(Path(root), excluded):
+                directories[:] = []
+                continue
             if ".git" in directories:
                 repositories.append(Path(root))
                 directories.remove(".git")

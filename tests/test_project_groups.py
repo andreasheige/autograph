@@ -2,7 +2,7 @@ import subprocess
 from datetime import datetime, timezone
 
 from src.agents.vault_graph_indexer import VaultGraphIndexer
-from src.core.projects import find_repositories, project_groups
+from src.core.projects import find_repositories, is_excluded, project_groups
 from src.core.vault import VaultManager
 from src.core.work_units import normalize_events, project_name, project_roots
 
@@ -129,3 +129,33 @@ def test_clones_sharing_history_make_their_folder_a_project(tmp_path):
         root / "client",
         root / "client" / "cmks",
     ]
+
+
+def test_an_excluded_folder_hides_its_repositories_and_drops_its_events(tmp_path):
+    client = tmp_path / "Knowit" / "client-brain"
+    other = tmp_path / "Knowit" / "capio-frontend"
+    for repository in [client, client / "nested", other]:
+        (repository / ".git").mkdir(parents=True)
+
+    assert is_excluded(client / "decisions", [client])
+    assert not is_excluded(tmp_path / "Knowit" / "client-brain-old", [client])
+    assert find_repositories([tmp_path], [client]) == [other]
+
+    def event(cwd, content):
+        return {
+            "timestamp": datetime(2026, 10, 24, 9, tzinfo=timezone.utc).isoformat(),
+            "source": "claude",
+            "session_id": "s1",
+            "role": "user",
+            "cwd": str(cwd),
+            "content": content,
+        }
+
+    events = normalize_events(
+        [event(client / "decisions", "Draft the platform ADR."), event(other, "Style the header.")],
+        [other],
+        lambda value: datetime.fromisoformat(value),
+        [client],
+    )
+    # Dropped, not left as "unassigned": its content must not reach a note.
+    assert [item["content"] for item in events] == ["Style the header."]
