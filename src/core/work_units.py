@@ -73,6 +73,27 @@ def _normalize_content(content: object) -> Optional[str]:
     return normalized[:MAX_EVENT_CONTENT]
 
 
+def project_name(repository: Path, groups: Iterable[Path] = ()) -> str:
+    """A repository's project: its group folder's name, else its own."""
+    for group in groups:
+        if repository != group and group in repository.parents:
+            return group.name
+    return repository.name
+
+
+def project_roots(repositories: Iterable[Path], groups: Iterable[Path] = ()) -> List[Path]:
+    """Folders a session's cwd is matched against: a grouped repository is
+    replaced by its group, so work in the group folder itself counts too."""
+    groups = list(groups)
+    roots: List[Path] = []
+    for repository in repositories:
+        name = project_name(repository, groups)
+        root = next((group for group in groups if group.name == name), repository)
+        if root not in roots:
+            roots.append(root)
+    return roots
+
+
 def _project_for_cwd(cwd: object, repositories: Iterable[Path]) -> str:
     if not isinstance(cwd, str) or not cwd.strip():
         return "unassigned"

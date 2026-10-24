@@ -6,7 +6,7 @@ from src.agents.daily_backfiller import DailyBackfillAgent
 from src.agents.sync_agent import AutographSyncAgent
 from src.core.daily_note_renderer import render_graph_connections
 from src.core.drivers.jsonl_session_driver import JsonlSessionDriver
-from src.core.work_units import build_work_units, normalize_events
+from src.core.work_units import build_work_units, normalize_events, project_roots
 
 
 class DailyNoteLinker:
@@ -40,10 +40,12 @@ class DailyNoteLinker:
             for event in driver.history_since(since)
         ]
         events = normalize_events(
-            raw_events, repositories, JsonlSessionDriver._parse_timestamp
+            raw_events,
+            project_roots(repositories, Config.PROJECT_GROUPS),
+            JsonlSessionDriver._parse_timestamp,
         )
         commits = self.daily_backfill._commits_since(
-            repositories, since, datetime.now(timezone.utc)
+            repositories, since, datetime.now(timezone.utc), Config.PROJECT_GROUPS
         )
         units_by_date = build_work_units(events, commits)
         commits_by_date: Dict[str, List[Dict[str, str]]] = {}

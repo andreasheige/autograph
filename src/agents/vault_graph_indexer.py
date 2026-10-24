@@ -17,8 +17,8 @@ class VaultGraphIndexer:
 
     marker = "<!-- Autograph managed links -->"
 
-    def __init__(self):
-        self.vault_manager = VaultManager(Config.VAULT_ROOT)
+    def __init__(self, vault_root: Path = None):
+        self.vault_manager = VaultManager(vault_root or Config.VAULT_ROOT)
         self.sync_agent = AutographSyncAgent(self.vault_manager.vault_root)
 
     @staticmethod
@@ -62,8 +62,15 @@ class VaultGraphIndexer:
             if note_path.name != "Index.md"
         ]
 
-    def _prune_empty_managed_project_indexes(self, projects_dir: Path) -> int:
-        """Remove only index/hub notes that Autograph created for empty folders."""
+    def _prune_empty_managed_project_indexes(
+        self, projects_dir: Path, keep: Iterable[str] = ()
+    ) -> int:
+        """Remove only index/hub notes that Autograph created for empty folders.
+
+        A project in `keep` (a repository on disk) keeps a plain hub instead,
+        without the link to the index that was just removed.
+        """
+        keep = set(keep)
         removed = 0
         for project_path in projects_dir.iterdir():
             if not project_path.is_dir() or self._project_leaf_notes(project_path):
@@ -81,6 +88,8 @@ class VaultGraphIndexer:
                 encoding="utf-8", errors="replace"
             ):
                 hub_path.unlink()
+                if project_path.name in keep:
+                    self.vault_manager.write_project_note(project_path.name)
                 removed += 1
         return removed
 
@@ -222,10 +231,10 @@ class VaultGraphIndexer:
             + f"- {self._wiki_link(Path('Autograph'), 'Autograph knowledge graph')}",
         )
 
-    def run(self) -> int:
+    def run(self, sync: bool = True, keep: Iterable[str] = ()) -> int:
         projects_dir = self.vault_manager.vault_root / "projects"
         changes = self._normalize_legacy_entity_filenames()
-        changes += self._prune_empty_managed_project_indexes(projects_dir)
+        changes += self._prune_empty_managed_project_indexes(projects_dir, keep)
         project_paths = sorted(
             path
             for path in projects_dir.iterdir()
@@ -243,9 +252,14 @@ class VaultGraphIndexer:
         sessions_dir = self.vault_manager.vault_root / "sessions"
         if sessions_dir.exists():
             changes += self._session_index(sessions_dir)
-        changes += self._projects_index(projects)
-        changes += self._root_index(projects)
+        # Every hub, including repositories with no commit or event notes yet.
+        listed = sorted(
+            set(projects)
+            | {path.stem for path in projects_dir.glob("*.md") if path.name != "Index.md"}
+        )
+        changes += self._projects_index(listed)
+        changes += self._root_index(listed)
         print(f"🕸️ Updated {changes} vault graph hub and index notes.")
-        if changes:
+        if changes and sync:
             self.sync_agent.sync()
         return changes

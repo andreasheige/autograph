@@ -25,7 +25,10 @@ from src.core.work_units import (
     build_work_units,
     fingerprint_work_day,
     normalize_events,
+    project_name,
+    project_roots,
 )
+from src.agents.vault_graph_indexer import VaultGraphIndexer
 
 
 class DailyBackfillAgent:
@@ -66,8 +69,12 @@ class DailyBackfillAgent:
 
     @staticmethod
     def _commits_since(
-        repositories: Iterable[Path], since: datetime, until: datetime
+        repositories: Iterable[Path],
+        since: datetime,
+        until: datetime,
+        groups: Iterable[Path] = (),
     ) -> List[Commit]:
+        groups = list(groups)
         commits = []
         for repository in repositories:
             try:
@@ -105,7 +112,7 @@ class DailyBackfillAgent:
                     Commit(
                         id=commit_id,
                         title=title,
-                        project=repository.name,
+                        project=project_name(repository, groups),
                         timestamp=commit_time,
                     )
                 )
@@ -229,19 +236,26 @@ class DailyBackfillAgent:
             hour=0, minute=0, second=0, microsecond=0
         )
         repositories = self._repositories(self.config.SEARCH_DIRS)
+        groups = self.config.PROJECT_GROUPS
+        # Every repository on disk gets a hub, so Projects lists all of them,
+        # not only those worked in during this window.
+        projects = sorted({project_name(repository, groups) for repository in repositories})
+        hubs = sum(self.vault_manager.write_project_note(name) for name in projects)
         raw_events = [
             event
             for driver in self.drivers
             for event in driver.history_since(since)
         ]
         events = normalize_events(
-            raw_events, repositories, JsonlSessionDriver._parse_timestamp
+            raw_events,
+            project_roots(repositories, groups),
+            JsonlSessionDriver._parse_timestamp,
         )
         session_metadata: Dict[Tuple[str, str], Dict[str, object]] = {}
         for driver in self.drivers:
             for session_id, metadata in driver.session_metadata(since).items():
                 session_metadata[(driver.source_name, session_id)] = metadata
-        commits = self._commits_since(repositories, since, until)
+        commits = self._commits_since(repositories, since, until, groups)
         units_by_date = build_work_units(events, commits)
         commits_by_date: Dict[str, List[Commit]] = {}
         for commit in commits:
@@ -325,6 +339,9 @@ class DailyBackfillAgent:
             print(f"✅ Created historical daily note: {date}")
 
         print(f"✅ Created {created} historical daily notes.")
-        if created:
+        indexes = VaultGraphIndexer(self.vault_manager.vault_root).run(
+            sync=False, keep=projects
+        )
+        if created or hubs or indexes:
             self.sync_agent.sync()
         return created
