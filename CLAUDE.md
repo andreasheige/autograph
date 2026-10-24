@@ -84,6 +84,11 @@ documented as cursor-free and is safe to call read-only.
   note's **Session:** link points to, and `write_session_note` never
   overwrites an existing file, so the stub writer leaves it alone. The server
   speaks MCP over stdout: a stray `print` there corrupts the protocol.
+- **Cleanup deletes only what a rule proves worthless.** `VaultCleanupAgent`
+  runs unattended every week, so a new rule must name why its files have no
+  value (empty, untouched placeholder, or a copy of something that still exists
+  elsewhere) and keep the file when that can't be checked. Never add a rule
+  that matches on age, folder or file name alone.
 
 ## Tuning constants
 
@@ -109,11 +114,12 @@ few events between dates as a result.
 
 ## launchd on macOS
 
-`infrastructure/install_launchd.sh` **generates** both plists from heredocs and
-manages exactly two labels: `com.autograph.observer` and `com.autograph.summary`.
+`infrastructure/install_launchd.sh` **generates** the plists from heredocs and
+manages exactly three labels: `com.autograph.observer`, `com.autograph.summary`
+and `com.autograph.cleanup` (weekly, Sunday 09:00).
 
 Edit the installer, not `~/Library/LaunchAgents/*.plist` — a re-install
-overwrites live plists. `uninstall_launchd.sh` also only knows those two labels,
+overwrites live plists. `uninstall_launchd.sh` also only knows those three labels,
 so any other `com.autograph.*` job is a leftover it will not clean up.
 
 launchd runs `/usr/bin/python3` (3.9.6), so keep the code 3.9-compatible. A
