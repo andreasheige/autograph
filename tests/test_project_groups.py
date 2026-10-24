@@ -1,6 +1,8 @@
+import subprocess
 from datetime import datetime, timezone
 
 from src.agents.vault_graph_indexer import VaultGraphIndexer
+from src.core.projects import find_repositories, project_groups
 from src.core.vault import VaultManager
 from src.core.work_units import normalize_events, project_name, project_roots
 
@@ -84,3 +86,46 @@ def test_a_repository_keeps_its_hub_when_its_folder_empties(tmp_path):
     hub = (tmp_path / "projects" / "kxse.md").read_text(encoding="utf-8")
     assert "Index" not in hub
     assert "[[projects/kxse|kxse]]" in (tmp_path / "projects" / "Index.md").read_text(encoding="utf-8")
+
+
+def git(repository, *args):
+    subprocess.run(
+        ["git", "-C", str(repository), "-c", "user.name=t", "-c", "user.email=t@t", *args],
+        check=True,
+        capture_output=True,
+    )
+
+
+def repository(path, subject, clone_of=None):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if clone_of is not None:
+        subprocess.run(["git", "clone", "-q", str(clone_of), str(path)], check=True)
+    else:
+        subprocess.run(["git", "init", "-q", str(path)], check=True)
+    git(path, "commit", "-q", "--allow-empty", "--no-verify", "-m", subject)
+    return path
+
+
+def test_clones_sharing_history_make_their_folder_a_project(tmp_path):
+    root = tmp_path / "Knowit"
+    dev = repository(root / "client" / "cmks" / "DEV_Backend", "init backend")
+    test = repository(root / "client" / "cmks" / "TEST_Backend", "deploy", clone_of=dev)
+    prod = repository(root / "client" / "cmks" / "PROD_Backend", "unrelated start")
+    frontend = repository(root / "client" / "capio-frontend", "init frontend")
+    prototype = repository(root / "client" / "cda-prototype", "init prototype")
+    first = repository(root / "app", "init app")
+    fork = repository(root / "app-backup", "backup", clone_of=first)
+    repositories = find_repositories([root])
+
+    groups = project_groups(repositories, [root])
+
+    # Unrelated repos in "client" and the search root itself are never grouped.
+    assert groups == [root / "client" / "cmks"]
+    assert {project_name(r, groups) for r in (dev, test, prod)} == {"cmks"}
+    assert project_name(frontend, groups) == "capio-frontend"
+    assert project_name(prototype, groups) == "cda-prototype"
+    assert project_name(fork, groups) == "app-backup"
+    assert project_groups(repositories, [root], [root / "client"]) == [
+        root / "client",
+        root / "client" / "cmks",
+    ]

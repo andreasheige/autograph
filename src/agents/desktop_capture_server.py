@@ -26,6 +26,7 @@ from src.core.daily_note_renderer import (
     daily_note_link,
     project_note_link,
 )
+from src.core.projects import find_repositories, project_groups
 from src.core.vocabulary import append_proposals, sort_tags
 
 SOURCE = "claudedesktop"
@@ -113,9 +114,11 @@ def _project_cwd(
         candidate = Path(search_dir) / project
         if (candidate / ".git").exists():
             return str(candidate)
-    for group in groups:
-        if group.name == project:
-            return str(group)
+    # Not a top-level repository: a nested one, or a group such as cmks.
+    repositories = find_repositories(search_dirs)
+    for folder in [*project_groups(repositories, search_dirs, groups), *repositories]:
+        if folder.name == project:
+            return str(folder)
     return None
 
 

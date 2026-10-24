@@ -7,7 +7,7 @@ what they don't.
 ## Common commands
 
 ```bash
-python3 -m pytest tests/ -q              # full suite, quiet (68 tests, ~1s)
+python3 -m pytest tests/ -q              # full suite, quiet (73 tests, ~1s)
 python3 run_daily_backfill.py --days 7   # what the 08:00 launchd job runs
 ```
 
@@ -69,12 +69,13 @@ documented as cursor-free and is safe to call read-only.
   (`MAX_SESSION_WORK_UNITS`) before ranking the day, so a single long session
   chunked into many candidates can't crowd out every other session that day
   under `MAX_DAILY_WORK_UNITS`.
-- **A project is a repository folder name, or an `AUTOGRAPH_PROJECT_GROUPS`
-  folder name.** Changing either setting changes which project a unit belongs
-  to, and so the fingerprint of every day in the window that had work there:
-  the next run regenerates those days with Ollama. Project grouping is
-  explicit because a generic rule ("a non-repo folder holding several repos")
-  would also swallow `capio-plattfrom`, whose repos are separate projects.
+- **A project is a repository folder name, or a project group's folder name.**
+  `src/core/projects.py` groups a folder when two repos directly in it share a
+  root commit (clones, like cmks's DEV/TEST/PROD). Don't loosen that to "a
+  non-repo folder holding several repos": `capio-plattfrom` would swallow
+  `capio-frontend`. A new group, a new search root or `AUTOGRAPH_PROJECT_GROUPS`
+  changes which project units belong to, and so the fingerprint of every day
+  in the window with work there: the next run regenerates those with Ollama.
 - **Only Copilot and Claude session IDs identify a session.** Codex records carry
   `session_id` on `session_meta` alone and Pi on its `session` record alone, so
   every other record in those files falls back to `source_path.parent.name` —
