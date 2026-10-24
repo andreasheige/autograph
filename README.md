@@ -148,14 +148,23 @@ Ollama:
 python3 run_daily_linker.py --days 14
 ```
 
-#### 7. Rebuilding Vault Graph Navigation
+#### 7. Tagging Existing Daily Notes
+To add frontmatter, vocabulary `tags` and **Related wiki** links to generated daily notes
+without regenerating them or invoking Ollama:
+```bash
+python3 run_daily_note_retrofit.py
+```
+Run it again after editing `vocabulary.md` or wiki tags to refresh every note. It commits
+and pushes the vault like the other workflows; `--no-sync` only writes the notes.
+
+#### 8. Rebuilding Vault Graph Navigation
 To create the stable root, daily, agent, project, and per-project index notes that connect
 related vault folders:
 ```bash
 python3 run_vault_graph_index.py
 ```
 
-#### 8. Saving Claude Desktop Conversations
+#### 9. Saving Claude Desktop Conversations
 Desktop chats are stored on claude.ai, not on disk, so Autograph only sees the
 ones you save. `run_desktop_capture_server.py` is a local MCP server with one
 tool, `save_to_autograph`. Say **"autograph this"** (or "save this") in a chat.
