@@ -10,6 +10,8 @@ Autograph is a modular, agentic system designed to bridge the gap between your d
 
 Read [the architecture and data-flow guide](docs/architecture.md) for the session
 collection, bounded daily synthesis, linking, automation, and vault-sync design.
+For a shorter tour with diagrams (what runs when, and what you decide by hand), see
+[How Autograph turns your work into a vault](https://gist.github.com/andreasheige/90fc40e8e682db226c8c3f25fa1550be).
 
 ---
 
