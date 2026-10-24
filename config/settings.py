@@ -87,6 +87,8 @@ class Config:
     PI_SESSION_ROOT = get_env_path("AUTOGRAPH_PI_SESSION_ROOT", "~/.pi/agent/sessions")
     # Written by the desktop capture MCP server only when the user asks.
     DESKTOP_CAPTURE_ROOT = get_env_path("AUTOGRAPH_DESKTOP_CAPTURE_ROOT", "~/.autograph/desktop-captures")
+    # Written by run_chatgpt_import.py from a ChatGPT data export.
+    CHATGPT_IMPORT_ROOT = get_env_path("AUTOGRAPH_CHATGPT_IMPORT_ROOT", "~/.autograph/chatgpt-imports")
 
 # Ensure the basic logging directory exists immediately on import
 os.makedirs(Config.LOG_DIR, exist_ok=True)
