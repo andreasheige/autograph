@@ -102,7 +102,7 @@ write_cleanup_plist() {
   <key>StartCalendarInterval</key>
   <dict>
     <key>Weekday</key>
-    <integer>0</integer>
+    <integer>1</integer>
     <key>Hour</key>
     <integer>9</integer>
     <key>Minute</key>
@@ -136,5 +136,5 @@ load_agent "$label_prefix.summary"
 load_agent "$label_prefix.cleanup"
 
 echo "Autograph observer starts at login; the daily summary runs at 08:00;"
-echo "vault cleanup runs Sundays at 09:00."
+echo "vault cleanup runs Mondays at 09:00."
 echo "Logs: $log_dir"
