@@ -60,22 +60,3 @@ def test_write_commit_note_preserves_session_context(temp_vault):
     ).read_text(encoding="utf-8")
     assert "Implemented the feature." in content
     assert "[[daily_notes/2026-08-29|2026-08-29]]" in content
-
-
-def test_prune_legacy_session_notes_keeps_non_session_events(temp_vault):
-    event_dir = temp_vault.vault_root / "projects" / "Project" / "events"
-    event_dir.mkdir(parents=True)
-    noisy_note = event_dir / "session.md"
-    noisy_note.write_text(
-        '# Historical Event\n\n```json\n{"entities": [], "narrative": "Old session"}\n```\n',
-        encoding="utf-8",
-    )
-    useful_note = event_dir / "commit.md"
-    useful_note.write_text(
-        '# Historical Event\n\n```json\n{"entities": ["Parser"]}\n```\n',
-        encoding="utf-8",
-    )
-
-    assert temp_vault.prune_legacy_session_notes() == 1
-    assert not noisy_note.exists()
-    assert useful_note.exists()

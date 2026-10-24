@@ -83,6 +83,40 @@ write_summary_plist() {
 EOF
 }
 
+write_cleanup_plist() {
+    cat > "$launch_agents_dir/$label_prefix.cleanup.plist" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>$label_prefix.cleanup</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>$python_executable</string>
+    <string>-u</string>
+    <string>run_vault_cleanup.py</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>$repo_root</string>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Weekday</key>
+    <integer>0</integer>
+    <key>Hour</key>
+    <integer>9</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>$log_dir/cleanup.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>$log_dir/cleanup.err.log</string>
+</dict>
+</plist>
+EOF
+}
+
 load_agent() {
     local label="$1"
     local plist_path="$launch_agents_dir/$label.plist"
@@ -93,10 +127,14 @@ load_agent() {
 
 write_observer_plist
 write_summary_plist
+write_cleanup_plist
 plutil -lint "$launch_agents_dir/$label_prefix.observer.plist" >/dev/null
 plutil -lint "$launch_agents_dir/$label_prefix.summary.plist" >/dev/null
+plutil -lint "$launch_agents_dir/$label_prefix.cleanup.plist" >/dev/null
 load_agent "$label_prefix.observer"
 load_agent "$label_prefix.summary"
+load_agent "$label_prefix.cleanup"
 
-echo "Autograph observer starts at login; the daily summary runs at 08:00."
+echo "Autograph observer starts at login; the daily summary runs at 08:00;"
+echo "vault cleanup runs Sundays at 09:00."
 echo "Logs: $log_dir"
