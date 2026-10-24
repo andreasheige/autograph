@@ -7,7 +7,7 @@ what they don't.
 ## Common commands
 
 ```bash
-python3 -m pytest tests/ -q              # full suite, quiet (73 tests, ~1s)
+python3 -m pytest tests/ -q              # full suite, quiet (85 tests, ~1s)
 python3 run_daily_backfill.py --days 7   # what the 08:00 launchd job runs
 ```
 
@@ -29,6 +29,14 @@ units directly (`normalize_events` → `build_work_units`). `history_since` is
 documented as cursor-free and is safe to call read-only.
 
 ## Invariants worth not breaking
+
+- **Time and cost are estimates per whole session and day.** `src/core/usage.py`
+  prices Claude's per-response `usage` at API list prices (a hand-kept table:
+  update it when prices or models change; unknown models count as unpriced
+  tokens). Claude repeats a response's usage on every line of a multi-block
+  message, so `usage_since` keys on the message id. Active time counts only
+  pauses of at most 15 minutes (`ACTIVE_GAP_THRESHOLD`). Neither is in the
+  fingerprint, so like any renderer change they show up when a note regenerates.
 
 - **The window is floored to midnight** (`daily_backfiller.py:183`). A rolling
   `now - days` instant leaves the oldest date half-inside the window, which
