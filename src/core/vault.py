@@ -167,21 +167,6 @@ class VaultManager:
             encoding="utf-8",
         )
 
-    def prune_legacy_session_notes(self) -> int:
-        """Delete only obsolete session fragments replaced by compact daily notes."""
-        removed = 0
-        for event_file in self.vault_root.glob("projects/*/events/*.md"):
-            content = event_file.read_text(encoding="utf-8", errors="replace")
-            try:
-                payload = content.split("```json\n", 1)[1].split("\n```", 1)[0]
-                data = json.loads(payload)
-            except (IndexError, json.JSONDecodeError):
-                continue
-            if isinstance(data.get("narrative"), str) and data.get("entities") == []:
-                event_file.unlink()
-                removed += 1
-        return removed
-
     def find_recent_events(self):
         """Helper for Daily Summary Agent to find events from the last 24 hours."""
         recent_events = []

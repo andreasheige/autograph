@@ -208,7 +208,7 @@ lists every model it used.
 | `python3 run_daily_backfill.py --days 14` | Creates or updates compact daily notes from sessions and commits. |
 | `python3 run_daily_backfill.py --days 14 --replace-generated` | Replaces only marked Autograph-generated daily notes. |
 | `python3 run_daily_backfill.py --date YYYY-MM-DD --replace-generated` | Regenerates one marked daily note. |
-| `python3 run_vault_cleanup.py` | Deletes only recognized legacy session-fragment notes. |
+| `python3 run_vault_cleanup.py` | Deletes only files with no value: empty placeholders and redundant legacy notes. Weekly via launchd. |
 | `python3 run_daily_note_retrofit.py` | Adds or refreshes frontmatter, tags and wiki links on generated daily notes, without Ollama. |
 | `python3 run_all.py` | Runs Git backfill, creates the current daily note, then starts the observer. |
 
@@ -256,10 +256,15 @@ ID, the models used, and a vault-relative reference to the local session file.
 It is written once and never rewritten, so annotations added to it survive.
 Obsidian backlinks show every daily note that links to a session.
 
-The cleanup command removes obsolete event notes only when their JSON payload
-contains a session `narrative` and an empty `entities` list. It does not remove
-daily notes, commit notes, entity notes, manual notes, or local session source
-records.
+The cleanup command removes a file only when a rule proves it has no value:
+it is empty or an untouched Obsidian canvas or base; it is a legacy entity note
+listing nothing but observation dates; or it is a legacy event note that is a
+session fragment the daily notes replaced, or whose commit subject is still in
+its repository's history. An event whose repository can't be found, or whose
+commit is gone, is the only remaining copy and stays. `.obsidian/`, `wiki/` and
+`graphify-out/` are skipped. Empty folders are removed as well, since Obsidian
+lists them and git cannot hold them. Vault sync stages Markdown only, so removed `.canvas` and `.base`
+files are never committed; they are untracked in practice.
 
 ## Model Configuration
 
@@ -287,7 +292,7 @@ change; reload the LaunchAgent after changing `.env`:
 
 ## macOS Automation
 
-Install or reload the two managed LaunchAgents:
+Install or reload the three managed LaunchAgents:
 
 ```bash
 ./infrastructure/install_launchd.sh
@@ -295,9 +300,10 @@ Install or reload the two managed LaunchAgents:
 
 - `com.autograph.observer` starts at login and is kept alive.
 - `com.autograph.summary` runs the daily-note workflow at 08:00.
+- `com.autograph.cleanup` runs `run_vault_cleanup.py` on Sundays at 09:00.
 - Logs are written to `~/.autograph/logs`.
 
-Remove both jobs with:
+Remove all three jobs with:
 
 ```bash
 ./infrastructure/uninstall_launchd.sh

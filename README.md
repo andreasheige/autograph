@@ -77,8 +77,8 @@ Autograph operates using a clean separation between the **Engine** and the **Mem
     ```bash
     ./infrastructure/install_launchd.sh
     ```
-    This starts the session observer whenever you log in and runs the daily summary
-    at 08:00. The launch agents write logs to `~/.autograph/logs`. Historical
+    This starts the session observer whenever you log in, runs the daily summary
+    at 08:00, and runs the vault cleanup on Sundays at 09:00. The launch agents write logs to `~/.autograph/logs`. Historical
     backfill remains manual because repeating it can create duplicate history events.
 
     To remove the automation:
@@ -132,14 +132,23 @@ repository and session, and associates nearby commits. It then synthesizes no mo
 technical sections plus one day overview per date. This keeps the scheduled daily job bounded
 and makes every section traceable to a project and, when available, a commit.
 
-#### 5. Removing Legacy Session Fragments
-To remove obsolete generated session-fragment notes that predate the compact daily-note
-pipeline:
+#### 5. Cleaning Up the Vault
+To remove files that hold nothing worth keeping (the weekly launchd job runs this):
 ```bash
+python3 run_vault_cleanup.py --dry-run   # list what would go, and why
 python3 run_vault_cleanup.py
 ```
-This removes only historical event notes containing a session narrative and an empty entity
-list. Commit notes, daily notes, entity notes, manual notes, and session records are retained.
+A file is removed only when a rule can say why it has no value:
+
+- an empty `.md`, `.canvas` or `.base` file, or an untouched Obsidian canvas or base
+- a legacy entity note that only lists "Observed in history on" dates
+- a legacy event note whose commit subject is still in its repository's history (the repo
+  must be under `AUTOGRAPH_SEARCH_DIR`), or a session fragment the daily notes replaced
+- a folder that is empty, or empty once those files are gone
+
+Everything else stays, including any note with text a person wrote. `.obsidian/`, `wiki/`
+and `graphify-out/` are never looked at. Each removal is printed with its reason, and the
+vault's git history keeps every removed file recoverable.
 
 #### 6. Connecting Existing Daily Notes
 To add verified agent and commit links to existing generated daily notes without invoking
