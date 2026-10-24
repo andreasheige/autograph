@@ -85,6 +85,10 @@ documented as cursor-free and is safe to call read-only.
   in the `session_metadata` map, which is keyed by real IDs read from the
   transcripts. Fixing the fallback would change work-unit grouping and so
   invalidate every fingerprint for those days.
+- **Codex Desktop is a label, not a driver.** `CodexDriver._source_for` reads
+  each file's first-line `originator`. Adding an originator to
+  `desktop_originators` moves those sessions to another work unit, so it
+  changes the fingerprints of every day in the window with that work.
 - **Desktop captures make their own session note.** `claudedesktop` events
   carry an id like `<title-slug>-<6 hex>`, and the capture server writes the
   full note at `sessions/claudedesktop/<id>.md`. That is the path the daily

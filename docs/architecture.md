@@ -25,7 +25,7 @@ making the vault a transcript archive.
 | Component | Responsibility |
 |---|---|
 | `config/settings.py` | Loads local configuration from `.env`. |
-| Session drivers | Incrementally read new records from Copilot CLI, Claude Code, Codex CLI, Pi, or the optional shell log. |
+| Session drivers | Incrementally read new records from Copilot CLI, Claude Code, Codex (CLI, editor and desktop app), Pi, or the optional shell log. The daily backfill also reads saved Claude Desktop captures and imported ChatGPT conversations. |
 | `SessionObserverAgent` | Buffers new session activity and associates it with detected commits. |
 | `MultiRepositorySessionTriggerAgent` | Watches repositories below `AUTOGRAPH_SEARCH_DIR` for new commits. |
 | `DailyBackfillAgent` | Builds compact daily work units, synthesizes notes, creates links, and tracks note input fingerprints. |
@@ -203,6 +203,15 @@ The renderer never adds weather or a generic "today" introduction. It links
 daily notes to adjacent generated days and links technical sections to known
 projects and commits. Missing repository or commit metadata is left unlinked
 rather than guessed.
+
+Codex desktop app sessions share `~/.codex/sessions` with the CLI; the driver
+reads each file's first record and labels sessions whose `originator` is the
+desktop app as **Codex Desktop**. ChatGPT conversations come from a data export:
+`run_chatgpt_import.py` keeps each conversation's final branch, as user and
+assistant messages with the model used, in `~/.autograph/chatgpt-imports`, and
+`ChatGPTDriver` reads them like any session. Their ids are conversation ids, so
+those sections link a session note. An agent hub such as `agents/ChatGPT.md` is
+created the first time a source appears in a daily note.
 
 A section carries a `**Session:**` link only when the work unit's session ID
 identifies exactly one recorded session. Copilot and Claude sessions are

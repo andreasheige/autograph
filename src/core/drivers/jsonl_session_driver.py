@@ -155,7 +155,7 @@ class JsonlSessionDriver(BaseDriver):
             session_id = source_path.parent.name
 
         return {
-            "source": self.source_name,
+            "source": self._source_for(source_path),
             "session_id": session_id,
             "timestamp": timestamp,
             "event_type": self._first_string(record.get("type"), "message"),
@@ -163,6 +163,10 @@ class JsonlSessionDriver(BaseDriver):
             "cwd": cwd,
             "content": content[: self.max_content_length],
         }
+
+    def _source_for(self, source_path: Optional[Path]) -> str:
+        """The agent a session file belongs to; one per driver unless overridden."""
+        return self.source_name
 
     @classmethod
     def _record_containers(cls, record: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -350,12 +354,43 @@ class CodexDriver(JsonlSessionDriver):
     source_name = "codex"
     root_attribute = "CODEX_SESSION_ROOT"
     file_patterns = ("history.jsonl", "sessions/**/*.jsonl")
+    # The Codex desktop app writes to the same folder as the CLI and editor
+    # plugins; only the first record's `originator` tells its sessions apart.
+    desktop_originators = {"Codex Desktop", "codex_work_desktop"}
+
+    def __init__(self, name: str, config: Any):
+        super().__init__(name, config)
+        self._file_sources: Dict[Path, str] = {}
+
+    def _source_for(self, source_path: Optional[Path]) -> str:
+        if source_path is None:
+            return self.source_name
+        if source_path not in self._file_sources:
+            source = self.source_name
+            try:
+                with open(source_path, "r", encoding="utf-8", errors="replace") as session_file:
+                    first = json.loads(session_file.readline() or "{}")
+                payload = first.get("payload") if isinstance(first, dict) else None
+                if isinstance(payload, dict) and payload.get("originator") in self.desktop_originators:
+                    source = "codexdesktop"
+            except (OSError, json.JSONDecodeError):
+                pass
+            self._file_sources[source_path] = source
+        return self._file_sources[source_path]
 
 
 class PiDriver(JsonlSessionDriver):
     source_name = "pi"
     root_attribute = "PI_SESSION_ROOT"
     file_patterns = ("**/*.jsonl",)
+
+
+class ChatGPTDriver(JsonlSessionDriver):
+    """Reads conversations run_chatgpt_import.py wrote from a ChatGPT data export."""
+
+    source_name = "chatgpt"
+    root_attribute = "CHATGPT_IMPORT_ROOT"
+    file_patterns = ("*.jsonl",)
 
 
 class ClaudeDesktopDriver(JsonlSessionDriver):
