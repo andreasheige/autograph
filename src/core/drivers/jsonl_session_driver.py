@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
 from src.core.drivers.base import BaseDriver
+from src.core.usage import usage_record
 
 
 class JsonlSessionDriver(BaseDriver):
@@ -297,6 +298,46 @@ class JsonlSessionDriver(BaseDriver):
                 "transcript": self._transcript_reference(path),
             }
         return sessions
+
+    def usage_since(self, since: datetime) -> List[Dict[str, Any]]:
+        """Priced token usage per API response after ``since``, without changing cursors.
+
+        Only Claude writes usage into its session lines; other agents yield nothing.
+        Each response is counted once, however many lines repeat it.
+        """
+        if since.tzinfo is None:
+            since = since.replace(tzinfo=timezone.utc)
+
+        records: Dict[str, Dict[str, Any]] = {}
+        for path in self._session_files():
+            modified_at = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
+            if modified_at < since:
+                continue
+            try:
+                with open(path, "r", encoding="utf-8", errors="replace") as session_file:
+                    for line in session_file:
+                        if '"usage"' not in line:
+                            continue
+                        try:
+                            record = json.loads(line)
+                        except json.JSONDecodeError:
+                            continue
+                        if not isinstance(record, dict):
+                            continue
+                        usage = usage_record(record)
+                        if usage is None or usage["message_id"] in records:
+                            continue
+                        timestamp = self._parse_timestamp(usage["timestamp"])
+                        if timestamp is None or timestamp < since:
+                            continue
+                        usage["timestamp"] = timestamp
+                        usage["source"] = self.source_name
+                        if usage["session_id"] is None:
+                            usage["session_id"] = path.stem
+                        records[usage["message_id"]] = usage
+            except OSError as error:
+                print(f"⚠️ [{self.source_name}] Could not read {path.name}: {error}")
+        return sorted(records.values(), key=lambda usage: usage["timestamp"])
 
     def _transcript_reference(self, path: Path) -> str:
         """Describe a session file without writing an absolute path into the vault."""

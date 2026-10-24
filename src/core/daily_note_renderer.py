@@ -1,7 +1,9 @@
 import json
 import re
 from pathlib import Path
-from typing import Any, Dict, Iterable, List
+from typing import Any, Dict, Iterable, List, Optional
+
+from src.core.usage import SUBSCRIPTION_USD_PER_MONTH, Usage, format_cost, format_minutes
 
 
 SESSION_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
@@ -107,14 +109,43 @@ def render_graph_connections(
     return "\n".join(lines)
 
 
+def usage_properties(usage: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """Frontmatter for Bases: the day's active minutes and API-price estimate, all sessions."""
+    if not usage:
+        return {}
+    return {
+        "active_minutes": usage["minutes"],
+        "api_cost_usd": round(usage["day"].cost, 2),
+    }
+
+
+def day_usage_line(usage: Dict[str, Any]) -> str:
+    day: Usage = usage["day"]
+    month: Usage = usage["month"]
+    line = f"**Time and cost today:** {format_minutes(usage['minutes'])} across all sessions"
+    if not day.tokens:
+        return line + "."
+    share = month.cost / SUBSCRIPTION_USD_PER_MONTH * 100
+    return (
+        f"{line}, Claude {format_cost(day)}. "
+        f"{usage['month_name']} so far: ≈ ${month.cost:,.2f}, "
+        f"{share:.0f}% of the ${SUBSCRIPTION_USD_PER_MONTH}/month subscription."
+    )
+
+
 def render_daily_note(
     date: str,
     summary: str,
     sections: Iterable[Dict[str, Any]],
     commits: List[Dict[str, str]],
     related_dates: Iterable[str],
+    usage: Optional[Dict[str, Any]] = None,
 ) -> str:
-    """Render a technical daily note with stable links to related vault notes."""
+    """Render a technical daily note with stable links to related vault notes.
+
+    ``usage`` holds the day's Claude API usage (``day``, a Usage over every session
+    that day, summarized or not) and the month's so far (``month``, ``month_name``).
+    """
     commits_by_id = {
         commit["id"]: commit for commit in commits
     }
@@ -158,6 +189,7 @@ def render_daily_note(
             ),
             "models": sorted(models),
             "commits": len(commits),
+            **usage_properties(usage),
             "tags": sorted(
                 {
                     term
@@ -176,6 +208,8 @@ def render_daily_note(
         "## Day summary",
         summary.strip(),
     ]
+    if usage:
+        lines.extend(["", day_usage_line(usage)])
 
     if commits:
         lines.extend(["", "## Commits"])
@@ -227,6 +261,12 @@ def render_daily_note(
             session_link = session_note_link(source, section.get("session_id"))
             if session_link:
                 lines.extend(["", f"**Session:** {session_link}"])
+        # Whole-session totals for the day: a session can span several sections.
+        if section.get("time"):
+            lines.extend(["", f"**Session time today:** {section['time']}"])
+        section_usage = section.get("usage")
+        if isinstance(section_usage, Usage) and section_usage.tokens:
+            lines.extend(["", f"**Session cost today:** {format_cost(section_usage)}"])
         wiki_pages = section.get("wiki_pages")
         if isinstance(wiki_pages, list) and wiki_pages:
             links = [
@@ -249,7 +289,16 @@ FRONTMATTER_BLOCK = re.compile(r"\A---\n.*?\n---\n\n?", re.S)
 PROJECT_LINK = re.compile(r"\*\*Related project:\*\* \[\[projects/[^|\]]+\|([^\]]+)\]\]")
 COMMIT_LINK = re.compile(r"\[\[projects/([^/|\]]+)/commits/([A-Za-z0-9]+)\|")
 AGENT_LINK = re.compile(r"\[\[agents/[^|\]]+\|([^\]]+)\]\]")
-SECTION_METADATA = ("**Related ", "**Agent source:**", "**Models:**", "**Session:**")
+SECTION_METADATA = (
+    "**Related ",
+    "**Agent source:**",
+    "**Models:**",
+    "**Session:**",
+    "**Session time today:**",
+    "**Session cost today:**",
+)
+# Written from session data the retrofit doesn't read, so it keeps them as they are.
+USAGE_PROPERTY = re.compile(r"^(active_minutes|api_cost_usd): (.+)$", re.M)
 
 
 def retrofit_daily_note(content: str, date: str, annotate) -> str:
@@ -261,6 +310,7 @@ def retrofit_daily_note(content: str, date: str, annotate) -> str:
     lines are replaced, so a rerun after a vocabulary edit refreshes them.
     """
     existing = FRONTMATTER_BLOCK.match(content)
+    usage_lines = USAGE_PROPERTY.findall(existing.group(0)) if existing else []
     if existing:
         if 'generated_by: "autograph"' not in existing.group(0):
             raise ValueError("Daily note has frontmatter Autograph did not write")
@@ -338,6 +388,12 @@ def retrofit_daily_note(content: str, date: str, annotate) -> str:
             "generated_by": "autograph",
         }
     )
+    commits_line = next(
+        index for index, line in enumerate(frontmatter) if line.startswith("commits: ")
+    )
+    frontmatter[commits_line + 1 : commits_line + 1] = [
+        f"{key}: {value}" for key, value in usage_lines
+    ]
     return "\n".join(frontmatter) + "\n\n" + body_text
 
 

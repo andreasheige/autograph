@@ -2,7 +2,7 @@ import os
 import subprocess
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Dict, Iterable, List, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple
 
 from config.settings import Config
 from src.agents.sync_agent import AutographSyncAgent
@@ -17,14 +17,17 @@ from src.core.drivers.jsonl_session_driver import (
     PiDriver,
 )
 from src.core.synthesizer import Synthesizer, SynthesizerError
+from src.core.usage import Usage, format_minutes
 from src.core.vault import VaultManager
 from src.core.vocabulary import ConceptIndex
 from src.core.work_units import (
     Commit,
+    SessionDay,
     WorkUnit,
     build_work_units,
     fingerprint_work_day,
     normalize_events,
+    session_day_totals,
 )
 
 
@@ -171,6 +174,7 @@ class DailyBackfillAgent:
         date: str,
         units: List[WorkUnit],
         session_metadata: Dict[Tuple[str, str], Dict[str, object]] = None,
+        session_days: Dict[Tuple[str, str, str], SessionDay] = None,
     ) -> List[Dict[str, object]]:
         session_metadata = session_metadata or {}
         sections = []
@@ -183,6 +187,10 @@ class DailyBackfillAgent:
             section["project"] = unit.project
             section["source"] = unit.source
             section["commits"] = [commit.id for commit in unit.commits]
+            session_day = (session_days or {}).get((date, unit.source, unit.session_id))
+            if session_day is not None and unit.source != "git":
+                section["time"] = format_minutes(session_day.minutes)
+                section["usage"] = session_day.usage
             metadata = session_metadata.get((unit.source, unit.session_id))
             if metadata is not None:
                 # Only identified sessions are linkable: codex and pi units fall
@@ -191,6 +199,30 @@ class DailyBackfillAgent:
                 section["models"] = metadata.get("models", [])
             sections.append(section)
         return sections
+
+    @staticmethod
+    def _usage_summary(
+        date: str,
+        usage: List[Dict[str, object]],
+        session_days: Dict[Tuple[str, str, str], SessionDay],
+    ) -> Optional[Dict[str, object]]:
+        """The day's time and API usage over all sessions, and the month's usage so far."""
+        day, month = Usage(), Usage()
+        for record in usage:
+            record_date = record["timestamp"].date().isoformat()
+            if record_date[:7] == date[:7] and record_date <= date:
+                month.add(record["usage"])
+                if record_date == date:
+                    day.add(record["usage"])
+        minutes = sum(
+            session_day.minutes
+            for (session_date, _, _), session_day in session_days.items()
+            if session_date == date
+        )
+        if not day.tokens and not minutes:
+            return None
+        month_name = datetime.strptime(date, "%Y-%m-%d").strftime("%B")
+        return {"day": day, "month": month, "month_name": month_name, "minutes": minutes}
 
     def _write_session_notes(
         self,
@@ -241,8 +273,16 @@ class DailyBackfillAgent:
         for driver in self.drivers:
             for session_id, metadata in driver.session_metadata(since).items():
                 session_metadata[(driver.source_name, session_id)] = metadata
+        # From the start of the window's first month, so each note can give its
+        # month-to-date total.
+        usage = [
+            record
+            for driver in self.drivers
+            for record in driver.usage_since(since.replace(day=1))
+        ]
         commits = self._commits_since(repositories, since, until)
         units_by_date = build_work_units(events, commits)
+        session_days = session_day_totals(events, usage)
         commits_by_date: Dict[str, List[Commit]] = {}
         for commit in commits:
             commits_by_date.setdefault(commit.timestamp.date().isoformat(), []).append(
@@ -281,7 +321,9 @@ class DailyBackfillAgent:
                 )
 
             print(f"📝 Generating {date} from {len(units)} work units.")
-            sections = self._sections_for_units(date, units, session_metadata)
+            sections = self._sections_for_units(
+                date, units, session_metadata, session_days
+            )
             if not sections:
                 continue
             for section in sections:
@@ -314,6 +356,7 @@ class DailyBackfillAgent:
                     )
                     if candidate != date
                 ],
+                self._usage_summary(date, usage, session_days),
             )
             try:
                 self._write_daily_note(date, content)
