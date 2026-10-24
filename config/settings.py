@@ -71,6 +71,10 @@ class Config:
     # Folders whose repositories are one project, named after the folder: e.g.
     # a client folder holding DEV/TEST/PROD clones of the same code.
     PROJECT_GROUPS = get_env_path_list("AUTOGRAPH_PROJECT_GROUPS", "")
+    # Folders kept out of the vault entirely: no repository, commit or session
+    # event under them reaches a note, e.g. client work whose agreement does
+    # not yet allow the vault's git remote.
+    EXCLUDED_PATHS = get_env_path_list("AUTOGRAPH_EXCLUDE_PATHS", "")
 
     # --- Logging ---
     LOG_DIR = get_env_path("AUTOGRAPH_LOG_DIR", "~/.autograph/logs")

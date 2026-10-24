@@ -247,6 +247,7 @@ Autograph is entirely driven by environment variables. Never commit your `.env` 
 | `AUTOGRAPH_VAULT_ROOT` | Absolute path to your Obsidian Vault | `~/.autograph/vault` |
 | `AUTOGRAPH_SEARCH_DIR` | Where to look for Git repositories; comma-separated for several roots (`~/Dev,~/Knowit`) | `~/projects` |
 | `AUTOGRAPH_PROJECT_GROUPS` | Extra folders whose repositories form one project named after the folder. Folders of clones (repos sharing a root commit, e.g. DEV/TEST/PROD checkouts) are detected without it | none |
+| `AUTOGRAPH_EXCLUDE_PATHS` | Comma-separated folders kept out of the vault: their repositories, commits and session events never reach a note (for client work whose agreement doesn't cover the vault's remote) | none |
 | `AUTOGRAPH_MODEL_NAME` | The Ollama model to use | `gemma4:26b` |
 | `AUTOGRAPH_OLLAMA_URL` | The local API endpoint for Ollama | `http://localhost:11434/api/generate` |
 | `AUTOGRAPH_OLLAMA_TIMEOUT_SECONDS` | Seconds to wait for an Ollama response | `300` |
