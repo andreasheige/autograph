@@ -190,9 +190,13 @@ itself for duplicate labels, missing `def`/`scheme` and dangling `broader`.
 Every repository under `AUTOGRAPH_SEARCH_DIR` gets a project hub at
 `projects/<name>.md` on each daily run, whether or not it saw work that week, and
 `projects/Index.md` lists every hub. A project is named after its repository
-folder, except inside a folder listed in `AUTOGRAPH_PROJECT_GROUPS`: there every
-repository, and work in the group folder itself, belongs to one project named
-after the group. Two repositories with the same folder name in different roots
+folder, except inside a project group: there every repository, and work in the
+group folder itself, belongs to one project named after the group. A folder is
+a group when it is neither a repository nor a search root and at least two of
+the repositories directly in it share a root commit, i.e. clones of one
+codebase such as a client's DEV/TEST/PROD checkouts. Folders of unrelated
+repositories share no history and stay apart. `AUTOGRAPH_PROJECT_GROUPS` adds
+folders the history can't reveal. Two repositories with the same folder name in different roots
 share a project.
 
 The renderer never adds weather or a generic "today" introduction. It links
