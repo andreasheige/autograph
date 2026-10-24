@@ -78,7 +78,7 @@ Autograph operates using a clean separation between the **Engine** and the **Mem
     ./infrastructure/install_launchd.sh
     ```
     This starts the session observer whenever you log in, runs the daily summary
-    at 08:00, and runs the vault cleanup on Sundays at 09:00. The launch agents write logs to `~/.autograph/logs`. Historical
+    at 08:00, and runs the vault cleanup on Mondays at 09:00. The launch agents write logs to `~/.autograph/logs`. Historical
     backfill remains manual because repeating it can create duplicate history events.
 
     To remove the automation:

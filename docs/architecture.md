@@ -300,7 +300,7 @@ Install or reload the three managed LaunchAgents:
 
 - `com.autograph.observer` starts at login and is kept alive.
 - `com.autograph.summary` runs the daily-note workflow at 08:00.
-- `com.autograph.cleanup` runs `run_vault_cleanup.py` on Sundays at 09:00.
+- `com.autograph.cleanup` runs `run_vault_cleanup.py` on Mondays at 09:00.
 - Logs are written to `~/.autograph/logs`.
 
 Remove all three jobs with:
