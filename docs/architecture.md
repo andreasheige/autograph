@@ -156,8 +156,13 @@ generated_by: "autograph"
 The properties come from work-unit and commit metadata, never from the model, so
 Obsidian Bases can filter days by project, agent or model. Commit notes carry
 `type`, `date`, `project` and `commit` the same way. Commit notes are rewritten
-on every backfill and pick up their properties then; daily notes get them only
-when regenerated with `--replace-generated`.
+on every backfill and pick up their properties then. Daily notes get them on
+regeneration, or from `python3 run_daily_note_retrofit.py`, which reads the
+properties back out of each generated note (project, agent, model and commit
+links), matches its sections against the vocabulary, and rewrites only the
+frontmatter and **Related wiki** lines. It calls no model, so it also covers days
+whose sessions are no longer on disk, and rerunning it after a `vocabulary.md`
+or wiki edit refreshes tags and links on every note.
 
 `tags` and **Related wiki** come from `vocabulary.md` at the vault root, the
 controlled vocabulary a human owns: only ticked lines count. Each term names
@@ -204,6 +209,7 @@ lists every model it used.
 | `python3 run_daily_backfill.py --days 14 --replace-generated` | Replaces only marked Autograph-generated daily notes. |
 | `python3 run_daily_backfill.py --date YYYY-MM-DD --replace-generated` | Regenerates one marked daily note. |
 | `python3 run_vault_cleanup.py` | Deletes only recognized legacy session-fragment notes. |
+| `python3 run_daily_note_retrofit.py` | Adds or refreshes frontmatter, tags and wiki links on generated daily notes, without Ollama. |
 | `python3 run_all.py` | Runs Git backfill, creates the current daily note, then starts the observer. |
 
 Historical session import is explicit because it can process private local
