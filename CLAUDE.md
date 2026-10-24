@@ -116,7 +116,7 @@ few events between dates as a result.
 
 `infrastructure/install_launchd.sh` **generates** the plists from heredocs and
 manages exactly three labels: `com.autograph.observer`, `com.autograph.summary`
-and `com.autograph.cleanup` (weekly, Sunday 09:00).
+and `com.autograph.cleanup` (weekly, Monday 09:00).
 
 Edit the installer, not `~/Library/LaunchAgents/*.plist` — a re-install
 overwrites live plists. `uninstall_launchd.sh` also only knows those three labels,
