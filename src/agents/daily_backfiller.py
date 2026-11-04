@@ -5,7 +5,7 @@ from typing import Dict, Iterable, List, Optional, Tuple
 
 from config.settings import Config
 from src.agents.sync_agent import AutographSyncAgent
-from src.core.daily_note_renderer import render_daily_note, session_note_link
+from src.core.daily_note_renderer import render_daily_note, session_note_link, strip_hidden_unicode
 from src.core.daily_note_state import DailyNoteState
 from src.core.drivers.jsonl_session_driver import (
     ChatGPTDriver,
@@ -154,7 +154,7 @@ class DailyBackfillAgent:
                 raise FileExistsError(
                     f"Refusing to overwrite unmarked daily note: {note_path}"
                 )
-        note_path.write_text(content, encoding="utf-8")
+        note_path.write_text(strip_hidden_unicode(content), encoding="utf-8")
         return True
 
     @staticmethod

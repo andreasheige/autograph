@@ -25,6 +25,15 @@ def render_frontmatter(fields: Dict[str, Any]) -> List[str]:
     return lines
 
 
+# Zero-width, bidi-control and BOM characters. Model output sometimes contains
+# them, and the vault's pre-commit scanner refuses any commit that adds one.
+HIDDEN_UNICODE_PATTERN = re.compile("[\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u2069\ufeff]")
+
+
+def strip_hidden_unicode(text: str) -> str:
+    return HIDDEN_UNICODE_PATTERN.sub("", text)
+
+
 def _clean_link_text(value: str) -> str:
     return value.replace("[", "").replace("]", "").replace("|", "-").strip()
 

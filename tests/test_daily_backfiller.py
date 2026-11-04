@@ -326,3 +326,13 @@ def test_commits_since_strips_the_record_separator_from_ids(tmp_path):
         assert commit_note_link(
             {"id": commit.id, "title": commit.title, "project": commit.project}
         ).count("\n") == 0
+
+
+def test_daily_backfill_strips_hidden_unicode_from_note(tmp_path):
+    agent = DailyBackfillAgent.__new__(DailyBackfillAgent)
+    agent.vault_manager = VaultManager(tmp_path)
+
+    agent._write_daily_note("2026-08-28", "# Day\u200b\u2066 one\n")
+
+    note_path = tmp_path / "daily_notes" / "2026-08-28.md"
+    assert note_path.read_text(encoding="utf-8") == "# Day one\n"

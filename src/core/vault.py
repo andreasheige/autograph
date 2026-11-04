@@ -10,6 +10,7 @@ from src.core.daily_note_renderer import (
     agent_note_link,
     model_list,
     render_frontmatter,
+    strip_hidden_unicode,
 )
 
 class VaultManager:
@@ -122,7 +123,7 @@ class VaultManager:
         )
         if context:
             content += f"\n## Session context\n\n{context}\n"
-        commit_file.write_text(content, encoding="utf-8")
+        commit_file.write_text(strip_hidden_unicode(content), encoding="utf-8")
 
     AGENT_DESCRIPTIONS = {
         "chatgpt": "ChatGPT conversations imported from a ChatGPT data export.",

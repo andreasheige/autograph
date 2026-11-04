@@ -190,3 +190,16 @@ def test_render_daily_note_tags_the_day_and_links_related_wiki_pages():
     assert 'tags: ["bff", "entra", "testing"]\n' in content
     assert "**Related wiki:** [[wiki/concepts/bff-login|BFF login - proxy]]" in content
     assert content.count("**Related wiki:**") == 1
+
+
+def test_write_commit_note_strips_hidden_unicode_from_session_context(tmp_path):
+    vault = VaultManager(tmp_path)
+    vault.write_commit_note(
+        "Autograph", "abc123def456", "Add ingestion", "2026-08-29",
+        "Hash `abc\u200b123` \u202eok\ufeff.",
+    )
+
+    content = (
+        tmp_path / "projects" / "Autograph" / "commits" / "abc123def456.md"
+    ).read_text(encoding="utf-8")
+    assert content.endswith("## Session context\n\nHash `abc123` ok.\n")
