@@ -1,11 +1,25 @@
 import json
 import os
+import re
+import time
 from datetime import datetime, timezone
+from itertools import islice
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, FrozenSet, Iterable, Iterator, List, Optional, Set, Tuple
 
 from src.core.drivers.base import BaseDriver
 from src.core.usage import usage_record
+
+# A last line still missing its newline after this long was left by a writer
+# that died mid-line; a live write finishes in milliseconds.
+DEAD_FRAGMENT_SECONDS = 300
+# Marks a record closed from a dead writer's half-written line.
+SALVAGED_KEY = "_autograph_salvaged"
+TRUNCATED_MARKER = " [truncated]"
+# Key overlap with a file's other records at which an object ending a broken
+# line counts as a record of its own rather than the tail of a cut-off one.
+SHAPE_SIMILARITY = 0.6
+MAX_SALVAGE_ATTEMPTS = 64
 
 
 class JsonlSessionDriver(BaseDriver):
@@ -21,29 +35,42 @@ class JsonlSessionDriver(BaseDriver):
         super().__init__(name)
         self.root = Path(getattr(config, self.root_attribute))
         self.cursor_path = Path(config.SESSION_CURSOR_PATH)
-        self._cursors = self._load_cursors()
+        self._cursors, self._fragments = self._load_cursors()
 
     @property
     def driver_id(self) -> str:
         return self.source_name
 
-    def _load_cursors(self) -> Dict[str, int]:
+    def _load_cursors(self) -> Tuple[Dict[str, int], Dict[str, Dict[str, int]]]:
+        """Read offsets per file, and the lengths of unfinished lines seen at them."""
         if not self.cursor_path.exists():
-            return {}
+            return {}, {}
 
         try:
             with open(self.cursor_path, "r", encoding="utf-8") as cursor_file:
                 data = json.load(cursor_file)
         except (OSError, json.JSONDecodeError) as error:
             print(f"⚠️ [{self.source_name}] Could not load session cursors: {error}")
-            return {}
+            return {}, {}
 
         cursors = data.get(self.source_name, {})
-        return {
-            path: offset
-            for path, offset in cursors.items()
-            if isinstance(path, str) and isinstance(offset, int) and offset >= 0
-        }
+        fragments = data.get("_fragments", {}).get(self.source_name, {})
+        return (
+            {
+                path: offset
+                for path, offset in cursors.items()
+                if isinstance(path, str) and isinstance(offset, int) and offset >= 0
+            },
+            {
+                path: {
+                    offset: length
+                    for offset, length in lengths.items()
+                    if isinstance(length, int) and length > 0
+                }
+                for path, lengths in fragments.items()
+                if isinstance(path, str) and isinstance(lengths, dict)
+            },
+        )
 
     def _save_cursors(self) -> None:
         self.cursor_path.parent.mkdir(parents=True, exist_ok=True)
@@ -56,6 +83,7 @@ class JsonlSessionDriver(BaseDriver):
                 all_cursors = {}
 
         all_cursors[self.source_name] = self._cursors
+        all_cursors.setdefault("_fragments", {})[self.source_name] = self._fragments
         temporary_path = self.cursor_path.with_suffix(".tmp")
         with open(temporary_path, "w", encoding="utf-8") as cursor_file:
             json.dump(all_cursors, cursor_file, indent=2, sort_keys=True)
@@ -78,19 +106,184 @@ class JsonlSessionDriver(BaseDriver):
             self._cursors[path_key] = size
             return []
 
-        offset = saved_offset if saved_offset <= size else 0
-        records = []
-        with open(path, "r", encoding="utf-8", errors="replace") as session_file:
+        if saved_offset > size:
+            saved_offset = 0
+            self._fragments.pop(path_key, None)
+        records, self._cursors[path_key] = self._read_records(
+            path, saved_offset, observing=True
+        )
+        return records
+
+    def _read_records(
+        self,
+        path: Path,
+        offset: int = 0,
+        observing: bool = False,
+        must_contain: Optional[bytes] = None,
+    ) -> Tuple[List[Dict[str, Any]], int]:
+        """Records from ``offset`` on, and the offset after the last one read.
+
+        A last line without a newline is either a complete record whose writer
+        never terminates it, one still being written, or a fragment left by a
+        writer that died mid-line. Reading stops before one still being written
+        so the next run reads it once complete. When ``observing``, the length
+        of such a line is kept, so that once a new record is appended to a dead
+        fragment, the line splits exactly where the fragment ended.
+        """
+        path_key = str(path)
+        if observing:
+            fragments = self._fragments.setdefault(path_key, {})
+        else:
+            fragments = self._fragments.get(path_key, {})
+        stale = time.time() - path.stat().st_mtime >= DEAD_FRAGMENT_SECONDS
+        entries: List[Any] = []
+        # Binary mode so offsets are exact bytes to stop short of the end at;
+        # text-mode tell() is an opaque cookie.
+        with open(path, "rb") as session_file:
             session_file.seek(offset)
             for line in session_file:
-                try:
-                    record = json.loads(line)
-                except json.JSONDecodeError:
+                fragment_key = str(offset)
+                if must_contain is not None and must_contain not in line:
+                    offset += len(line)
                     continue
-                if isinstance(record, dict):
-                    records.append(record)
-            self._cursors[path_key] = session_file.tell()
-        return records
+                record = self._load_record(line)
+                if record is not None:
+                    entries.append(record)
+                    if observing:
+                        fragments.pop(fragment_key, None)
+                else:
+                    if not line.endswith(b"\n"):
+                        if observing:
+                            fragments[fragment_key] = len(line)
+                        if not stale:
+                            break
+                    entries.extend(self._recover(line, fragments.get(fragment_key)))
+                offset += len(line)
+        if observing and not fragments:
+            self._fragments.pop(path_key, None)
+
+        # Only a broken line needs the file's record shapes to be judged.
+        shapes: Set[FrozenSet[str]] = set()
+        if any(isinstance(entry, tuple) for entry in entries):
+            shapes = {
+                frozenset(entry)
+                for entry in entries
+                if isinstance(entry, dict) and not entry.get(SALVAGED_KEY)
+            }
+        records = []
+        for entry in entries:
+            if isinstance(entry, dict):
+                records.append(entry)
+                continue
+            prefix, candidate, line = entry
+            if self._looks_like_record(candidate, shapes):
+                parts = [self._salvage(prefix), candidate]
+            else:
+                parts = [self._salvage(line)]
+            records.extend(part for part in parts if part is not None)
+        return records, offset
+
+    @staticmethod
+    def _load_record(line: bytes) -> Optional[Dict[str, Any]]:
+        try:
+            record = json.loads(line.decode("utf-8", errors="replace"))
+        except json.JSONDecodeError:
+            return None
+        return record if isinstance(record, dict) else None
+
+    def _recover(self, line: bytes, fragment_length: Optional[int]) -> List[Any]:
+        """What a line that does not parse holds, once its writer is done with it.
+
+        A writer that died mid-line leaves a fragment, and the next record is
+        appended to it. With the fragment's length known the split is exact.
+        Otherwise a complete object the line ends with is returned as
+        ``(prefix, object, line)`` for ``_read_records`` to judge against the
+        file's other records, and a line with none is salvaged whole.
+        """
+        line = line.rstrip(b"\r\n")
+        if fragment_length is not None and 0 < fragment_length < len(line):
+            record = self._load_record(line[fragment_length:])
+            if record is not None:
+                parts = [self._salvage(line[:fragment_length]), record]
+                return [part for part in parts if part is not None]
+
+        start = line.find(b"{", 1)
+        while start != -1:
+            candidate = self._load_record(line[start:])
+            if candidate is not None:
+                return [(line[:start], candidate, line)]
+            start = line.find(b"{", start + 1)
+        salvaged = self._salvage(line)
+        return [salvaged] if salvaged is not None else []
+
+    @staticmethod
+    def _looks_like_record(candidate: Dict[str, Any], shapes: Set[FrozenSet[str]]) -> bool:
+        """Whether an object ending a broken line is a record of its own.
+
+        A record cut off right after a nested object reads byte for byte like a
+        fragment with a new record appended. Records in one file share most of
+        their keys and nested objects do not (over real Claude, Codex, Copilot
+        and Pi sessions, 2 of 1.2M nested objects reach the threshold), so key
+        overlap decides; with no other record to compare, timestamp and type do.
+        """
+        keys = frozenset(candidate)
+        if not keys:
+            return False
+        if shapes:
+            return any(
+                len(keys & shape) / len(keys | shape) >= SHAPE_SIMILARITY
+                for shape in shapes
+            )
+        return ("timestamp" in keys or "ts" in keys) and "type" in keys
+
+    @staticmethod
+    def _salvage(fragment: bytes) -> Optional[Dict[str, Any]]:
+        """Close a dead writer's half-written record, marked as salvaged.
+
+        Ends an open string and closes open objects and arrays. Where the cut
+        leaves a key, number or literal unfinished, backs up to the last point
+        outside a string at which closing gives valid JSON.
+        """
+        text = fragment.decode("utf-8", errors="replace").strip()
+        closers: List[str] = []
+        cuts: List[Tuple[int, str]] = []
+        in_string = escaped = False
+        for position, char in enumerate(text):
+            if in_string:
+                if escaped:
+                    escaped = False
+                elif char == "\\":
+                    escaped = True
+                elif char == '"':
+                    in_string = False
+                continue
+            cuts.append((position, "".join(reversed(closers))))
+            if char == '"':
+                in_string = True
+            elif char in "{[":
+                closers.append("}" if char == "{" else "]")
+            elif char in "}]" and closers:
+                closers.pop()
+        closing = "".join(reversed(closers))
+
+        def attempts() -> Iterator[str]:
+            if in_string:
+                yield text + '"' + closing
+                # Cut inside an escape: drop the unfinished \ or \uXXXX.
+                yield re.sub(r"\\(u[0-9a-fA-F]{0,3})?$", "", text) + '"' + closing
+            yield text + closing
+            for position, closed in reversed(cuts):
+                yield text[:position] + closed
+
+        for attempt in islice(attempts(), MAX_SALVAGE_ATTEMPTS):
+            try:
+                record = json.loads(attempt)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(record, dict) and record:
+                record[SALVAGED_KEY] = True
+                return record
+        return None
 
     @staticmethod
     def _first_string(*values: Any) -> Optional[str]:
@@ -162,7 +355,8 @@ class JsonlSessionDriver(BaseDriver):
             "event_type": self._first_string(record.get("type"), "message"),
             "role": role or "unknown",
             "cwd": cwd,
-            "content": content[: self.max_content_length],
+            "content": content[: self.max_content_length]
+            + (TRUNCATED_MARKER if record.get(SALVAGED_KEY) else ""),
         }
 
     def _source_for(self, source_path: Optional[Path]) -> str:
@@ -239,32 +433,27 @@ class JsonlSessionDriver(BaseDriver):
                 continue
 
             try:
-                with open(path, "r", encoding="utf-8", errors="replace") as session_file:
-                    for line in session_file:
-                        try:
-                            record = json.loads(line)
-                        except json.JSONDecodeError:
-                            continue
-                        if not isinstance(record, dict):
-                            continue
-                        event = self._normalize_record(record, path)
-                        if event is None:
-                            continue
-                        event_time = self._parse_timestamp(event["timestamp"])
-                        if event_time is not None and event_time < since:
-                            continue
-                        event_key = (
-                            event["source"],
-                            event["session_id"],
-                            event["timestamp"],
-                            event["role"],
-                            event["content"],
-                        )
-                        if event_key not in seen:
-                            seen.add(event_key)
-                            events.append(event)
+                records, _ = self._read_records(path)
             except OSError as error:
                 print(f"⚠️ [{self.source_name}] Could not read {path.name}: {error}")
+                continue
+            for record in records:
+                event = self._normalize_record(record, path)
+                if event is None:
+                    continue
+                event_time = self._parse_timestamp(event["timestamp"])
+                if event_time is not None and event_time < since:
+                    continue
+                event_key = (
+                    event["source"],
+                    event["session_id"],
+                    event["timestamp"],
+                    event["role"],
+                    event["content"],
+                )
+                if event_key not in seen:
+                    seen.add(event_key)
+                    events.append(event)
         return events
 
     def session_metadata(self, since: datetime) -> Dict[str, Dict[str, Any]]:
@@ -281,21 +470,15 @@ class JsonlSessionDriver(BaseDriver):
             session_id = None
             models: List[str] = []
             try:
-                with open(path, "r", encoding="utf-8", errors="replace") as session_file:
-                    for line in session_file:
-                        try:
-                            record = json.loads(line)
-                        except json.JSONDecodeError:
-                            continue
-                        if not isinstance(record, dict):
-                            continue
-                        session_id = session_id or self._record_session_id(record)
-                        for model in self._record_models(record):
-                            if model not in models:
-                                models.append(model)
+                records, _ = self._read_records(path)
             except OSError as error:
                 print(f"⚠️ [{self.source_name}] Could not read {path.name}: {error}")
                 continue
+            for record in records:
+                session_id = session_id or self._record_session_id(record)
+                for model in self._record_models(record):
+                    if model not in models:
+                        models.append(model)
 
             sessions[session_id or path.parent.name] = {
                 "models": models,
@@ -318,29 +501,26 @@ class JsonlSessionDriver(BaseDriver):
             if modified_at < since:
                 continue
             try:
-                with open(path, "r", encoding="utf-8", errors="replace") as session_file:
-                    for line in session_file:
-                        if '"usage"' not in line:
-                            continue
-                        try:
-                            record = json.loads(line)
-                        except json.JSONDecodeError:
-                            continue
-                        if not isinstance(record, dict):
-                            continue
-                        usage = usage_record(record)
-                        if usage is None or usage["message_id"] in records:
-                            continue
-                        timestamp = self._parse_timestamp(usage["timestamp"])
-                        if timestamp is None or timestamp < since:
-                            continue
-                        usage["timestamp"] = timestamp
-                        usage["source"] = self.source_name
-                        if usage["session_id"] is None:
-                            usage["session_id"] = path.stem
-                        records[usage["message_id"]] = usage
+                file_records, _ = self._read_records(path, must_contain=b'"usage"')
             except OSError as error:
                 print(f"⚠️ [{self.source_name}] Could not read {path.name}: {error}")
+                continue
+            for record in file_records:
+                # A salvaged record's usage may be cut off part way: no price
+                # beats a wrong one.
+                if record.get(SALVAGED_KEY):
+                    continue
+                usage = usage_record(record)
+                if usage is None or usage["message_id"] in records:
+                    continue
+                timestamp = self._parse_timestamp(usage["timestamp"])
+                if timestamp is None or timestamp < since:
+                    continue
+                usage["timestamp"] = timestamp
+                usage["source"] = self.source_name
+                if usage["session_id"] is None:
+                    usage["session_id"] = path.stem
+                records[usage["message_id"]] = usage
         return sorted(records.values(), key=lambda usage: usage["timestamp"])
 
     def _transcript_reference(self, path: Path) -> str:
