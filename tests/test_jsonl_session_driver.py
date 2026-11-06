@@ -309,6 +309,18 @@ def test_fragment_length_kept_before_lengths_became_lists_still_splits(tmp_path)
     assert [event["content"] for event in events] == ["kept"]
 
 
+def test_appended_record_with_usage_but_no_text_is_kept(tmp_path):
+    event_file, config = _copilot_session(tmp_path)
+    driver = CopilotDriver("copilot", config)
+    driver.observe()
+    usage = {"type": "assistant", "message": {"id": "m1", "usage": {"input_tokens": 3}}}
+
+    _append(event_file, '{"type":"message","data":{"content":"dead"},"x":' + json.dumps(usage) + "\n")
+
+    records, _ = driver._read_records(event_file)
+    assert usage in records
+
+
 def test_salvage_closes_any_cut_point():
     salvage = JsonlSessionDriver._salvage
     assert salvage(b'{"a": "x\\u00') == {"a": "x", "_autograph_salvaged": True}
