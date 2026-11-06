@@ -41,7 +41,7 @@ class JsonlSessionDriver(BaseDriver):
     def driver_id(self) -> str:
         return self.source_name
 
-    def _load_cursors(self) -> Tuple[Dict[str, int], Dict[str, Dict[str, int]]]:
+    def _load_cursors(self) -> Tuple[Dict[str, int], Dict[str, Dict[str, List[int]]]]:
         """Read offsets per file, and the lengths of unfinished lines seen at them."""
         if not self.cursor_path.exists():
             return {}, {}
@@ -63,12 +63,12 @@ class JsonlSessionDriver(BaseDriver):
             },
             {
                 path: {
-                    offset: length
-                    for offset, length in lengths.items()
-                    if isinstance(length, int) and length > 0
+                    offset: [length for length in lengths if isinstance(length, int) and length > 0]
+                    for offset, lengths in by_offset.items()
+                    if isinstance(lengths, list)
                 }
-                for path, lengths in fragments.items()
-                if isinstance(path, str) and isinstance(lengths, dict)
+                for path, by_offset in fragments.items()
+                if isinstance(path, str) and isinstance(by_offset, dict)
             },
         )
 
@@ -126,9 +126,9 @@ class JsonlSessionDriver(BaseDriver):
         A last line without a newline is either a complete record whose writer
         never terminates it, one still being written, or a fragment left by a
         writer that died mid-line. Reading stops before one still being written
-        so the next run reads it once complete. When ``observing``, the length
-        of such a line is kept, so that once a new record is appended to a dead
-        fragment, the line splits exactly where the fragment ended.
+        so the next run reads it once complete. When ``observing``, every length
+        such a line is seen at is kept, so that once a new record is appended to
+        a dead fragment, the line splits exactly where the fragment ended.
         """
         path_key = str(path)
         if observing:
@@ -136,6 +136,7 @@ class JsonlSessionDriver(BaseDriver):
         else:
             fragments = self._fragments.get(path_key, {})
         stale = time.time() - path.stat().st_mtime >= DEAD_FRAGMENT_SECONDS
+        start = offset
         entries: List[Any] = []
         # Binary mode so offsets are exact bytes to stop short of the end at;
         # text-mode tell() is an opaque cookie.
@@ -154,20 +155,30 @@ class JsonlSessionDriver(BaseDriver):
                 else:
                     if not line.endswith(b"\n"):
                         if observing:
-                            fragments[fragment_key] = len(line)
+                            lengths = fragments.setdefault(fragment_key, [])
+                            if len(line) not in lengths:
+                                lengths.append(len(line))
                         if not stale:
                             break
-                    entries.extend(self._recover(line, fragments.get(fragment_key)))
+                    entries.extend(self._recover(line, fragments.get(fragment_key, [])))
                 offset += len(line)
         if observing and not fragments:
             self._fragments.pop(path_key, None)
 
-        # Only a broken line needs the file's record shapes to be judged.
+        # Only a broken line needs the file's record shapes to be judged, and
+        # from the whole file: a batch may hold nothing but the broken line.
         shapes: Set[FrozenSet[str]] = set()
         if any(isinstance(entry, tuple) for entry in entries):
+            earlier: List[Any] = []
+            if start:
+                with open(path, "rb") as session_file:
+                    earlier = [
+                        self._load_record(line)
+                        for line in session_file.read(start).splitlines()
+                    ]
             shapes = {
                 frozenset(entry)
-                for entry in entries
+                for entry in earlier + entries
                 if isinstance(entry, dict) and not entry.get(SALVAGED_KEY)
             }
         records = []
@@ -176,10 +187,11 @@ class JsonlSessionDriver(BaseDriver):
                 records.append(entry)
                 continue
             prefix, candidate, line = entry
-            if self._looks_like_record(candidate, shapes):
+            whole = self._salvage(line)
+            if self._is_own_record(candidate, whole, shapes):
                 parts = [self._salvage(prefix), candidate]
             else:
-                parts = [self._salvage(line)]
+                parts = [whole]
             records.extend(part for part in parts if part is not None)
         return records, offset
 
@@ -191,20 +203,20 @@ class JsonlSessionDriver(BaseDriver):
             return None
         return record if isinstance(record, dict) else None
 
-    def _recover(self, line: bytes, fragment_length: Optional[int]) -> List[Any]:
+    def _recover(self, line: bytes, fragment_lengths: List[int]) -> List[Any]:
         """What a line that does not parse holds, once its writer is done with it.
 
         A writer that died mid-line leaves a fragment, and the next record is
-        appended to it. With the fragment's length known the split is exact.
+        appended to it. With a length the fragment was seen at, the split is exact.
         Otherwise a complete object the line ends with is returned as
         ``(prefix, object, line)`` for ``_read_records`` to judge against the
         file's other records, and a line with none is salvaged whole.
         """
         line = line.rstrip(b"\r\n")
-        if fragment_length is not None and 0 < fragment_length < len(line):
-            record = self._load_record(line[fragment_length:])
+        for length in fragment_lengths:
+            record = self._load_record(line[length:]) if length < len(line) else None
             if record is not None:
-                parts = [self._salvage(line[:fragment_length]), record]
+                parts = [self._salvage(line[:length]), record]
                 return [part for part in parts if part is not None]
 
         start = line.find(b"{", 1)
@@ -216,15 +228,20 @@ class JsonlSessionDriver(BaseDriver):
         salvaged = self._salvage(line)
         return [salvaged] if salvaged is not None else []
 
-    @staticmethod
-    def _looks_like_record(candidate: Dict[str, Any], shapes: Set[FrozenSet[str]]) -> bool:
+    def _is_own_record(
+        self,
+        candidate: Dict[str, Any],
+        whole: Optional[Dict[str, Any]],
+        shapes: Set[FrozenSet[str]],
+    ) -> bool:
         """Whether an object ending a broken line is a record of its own.
 
         A record cut off right after a nested object reads byte for byte like a
         fragment with a new record appended. Records in one file share most of
         their keys and nested objects do not (over real Claude, Codex, Copilot
         and Pi sessions, 2 of 1.2M nested objects reach the threshold), so key
-        overlap decides; with no other record to compare, timestamp and type do.
+        overlap decides. A file with no other record to compare splits only
+        where reading the line whole, ``whole``, would lose the object's content.
         """
         keys = frozenset(candidate)
         if not keys:
@@ -234,7 +251,10 @@ class JsonlSessionDriver(BaseDriver):
                 len(keys & shape) / len(keys | shape) >= SHAPE_SIMILARITY
                 for shape in shapes
             )
-        return ("timestamp" in keys or "ts" in keys) and "type" in keys
+        return whole is None or (
+            self._normalize_record(whole) is None
+            and self._normalize_record(candidate) is not None
+        )
 
     @staticmethod
     def _salvage(fragment: bytes) -> Optional[Dict[str, Any]]:

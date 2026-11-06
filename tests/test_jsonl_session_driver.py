@@ -239,6 +239,37 @@ def test_unrecorded_cut_after_a_nested_object_stays_one_record(tmp_path):
     assert history[1]["role"] == "user"
 
 
+def test_fragment_and_record_arriving_between_polls_keep_the_record(tmp_path):
+    event_file, config = _copilot_session(tmp_path)
+    driver = CopilotDriver("copilot", config)
+    driver.observe()
+
+    _append(
+        event_file,
+        '{"type":"message","data":'
+        + json.dumps({"type": "message", "data": {"content": "kept"}})
+        + "\n",
+    )
+
+    events = driver.extract_entities(driver.observe())
+    assert [event["content"] for event in events] == ["kept"]
+
+
+def test_fragment_boundary_survives_a_record_appended_without_newline(tmp_path):
+    event_file, config = _copilot_session(tmp_path)
+    driver = CopilotDriver("copilot", config)
+    driver.observe()
+
+    _append(event_file, '{"type":"message","data":')
+    assert driver.observe() == ""
+    _append(event_file, json.dumps({"data": {"content": "appended"}}))
+    assert driver.observe() == ""
+    _append(event_file, "\n")
+
+    events = driver.extract_entities(driver.observe())
+    assert [event["content"] for event in events] == ["appended"]
+
+
 def test_salvage_closes_any_cut_point():
     salvage = JsonlSessionDriver._salvage
     assert salvage(b'{"a": "x\\u00') == {"a": "x", "_autograph_salvaged": True}
