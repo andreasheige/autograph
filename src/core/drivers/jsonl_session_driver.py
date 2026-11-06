@@ -257,7 +257,8 @@ class JsonlSessionDriver(BaseDriver):
             )
         candidate_event = self._normalize_record(candidate)
         if candidate_event is None:
-            return False
+            # No text to lose either way, but usage or a model may be.
+            return True
         whole_event = self._normalize_record(whole) if whole is not None else None
         return whole_event is None or candidate_event["content"] not in whole_event["content"]
 
