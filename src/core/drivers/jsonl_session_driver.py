@@ -63,9 +63,13 @@ class JsonlSessionDriver(BaseDriver):
             },
             {
                 path: {
-                    offset: [length for length in lengths if isinstance(length, int) and length > 0]
+                    # A single length is how one was kept before they became lists.
+                    offset: [
+                        length
+                        for length in (lengths if isinstance(lengths, list) else [lengths])
+                        if isinstance(length, int) and length > 0
+                    ]
                     for offset, lengths in by_offset.items()
-                    if isinstance(lengths, list)
                 }
                 for path, by_offset in fragments.items()
                 if isinstance(path, str) and isinstance(by_offset, dict)
@@ -240,8 +244,8 @@ class JsonlSessionDriver(BaseDriver):
         fragment with a new record appended. Records in one file share most of
         their keys and nested objects do not (over real Claude, Codex, Copilot
         and Pi sessions, 2 of 1.2M nested objects reach the threshold), so key
-        overlap decides. A file with no other record to compare splits only
-        where reading the line whole, ``whole``, would lose the object's content.
+        overlap decides. A file with no other record to compare splits unless
+        reading the line whole, ``whole``, keeps the object's content too.
         """
         keys = frozenset(candidate)
         if not keys:
@@ -251,10 +255,11 @@ class JsonlSessionDriver(BaseDriver):
                 len(keys & shape) / len(keys | shape) >= SHAPE_SIMILARITY
                 for shape in shapes
             )
-        return whole is None or (
-            self._normalize_record(whole) is None
-            and self._normalize_record(candidate) is not None
-        )
+        candidate_event = self._normalize_record(candidate)
+        if candidate_event is None:
+            return False
+        whole_event = self._normalize_record(whole) if whole is not None else None
+        return whole_event is None or candidate_event["content"] not in whole_event["content"]
 
     @staticmethod
     def _salvage(fragment: bytes) -> Optional[Dict[str, Any]]:

@@ -270,6 +270,45 @@ def test_fragment_boundary_survives_a_record_appended_without_newline(tmp_path):
     assert [event["content"] for event in events] == ["appended"]
 
 
+def test_appended_record_survives_a_fragment_with_content_of_its_own(tmp_path):
+    event_file, config = _copilot_session(tmp_path)
+    driver = CopilotDriver("copilot", config)
+    driver.observe()
+
+    _append(
+        event_file,
+        '{"type":"message","data":{"content":"dead"},"extra":'
+        + _record("kept")
+        + "\n",
+    )
+
+    events = driver.extract_entities(driver.observe())
+    assert [event["content"] for event in events] == ["dead [truncated]", "kept"]
+
+
+def test_fragment_length_kept_before_lengths_became_lists_still_splits(tmp_path):
+    event_file, config = _copilot_session(tmp_path, _record("before") + "\n")
+    fragment = '{"type":"message","data":'
+    config.SESSION_CURSOR_PATH.write_text(
+        json.dumps(
+            {
+                "copilot": {str(event_file): event_file.stat().st_size},
+                "_fragments": {
+                    "copilot": {
+                        str(event_file): {str(event_file.stat().st_size): len(fragment)}
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    _append(event_file, fragment + json.dumps({"data": {"content": "kept"}}) + "\n")
+
+    driver = CopilotDriver("copilot", config)
+    events = driver.extract_entities(driver.observe())
+    assert [event["content"] for event in events] == ["kept"]
+
+
 def test_salvage_closes_any_cut_point():
     salvage = JsonlSessionDriver._salvage
     assert salvage(b'{"a": "x\\u00') == {"a": "x", "_autograph_salvaged": True}
