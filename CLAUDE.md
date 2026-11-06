@@ -7,7 +7,7 @@ what they don't.
 ## Common commands
 
 ```bash
-python3 -m pytest tests/ -q              # full suite, quiet (86 tests, ~1s)
+python3 -m pytest tests/ -q              # full suite, quiet (101 tests, ~1s)
 python3 run_daily_backfill.py --days 7   # what the 08:00 launchd job runs
 ```
 
@@ -105,6 +105,18 @@ documented as cursor-free and is safe to call read-only.
   each file's first-line `originator`. Adding an originator to
   `desktop_originators` moves those sessions to another work unit, so it
   changes the fingerprints of every day in the window with that work.
+- **A session line without a newline is never consumed early.** Every
+  `JsonlSessionDriver` reader goes through `_read_records`, which works in byte
+  offsets: it stops before an unterminated last line that does not parse, so
+  `observe()` reads it once complete. Such a line unchanged for
+  `DEAD_FRAGMENT_SECONDS` (5 min) is a dead writer's fragment: `_salvage`
+  closes it and the event content ends in ` [truncated]`; `usage_since` skips
+  salvaged records. The observer keeps every length it saw an unfinished line
+  at in the cursor file under `_fragments` (`history_since` only reads it), so
+  a record later appended to the fragment splits off exactly; without one,
+  key overlap with the file's other records decides (`_is_own_record`). Don't
+  switch these readers back to text mode or advance an offset past a line that
+  hasn't been judged — that silently drops the record, which is issue #20.
 - **Desktop captures make their own session note.** `claudedesktop` events
   carry an id like `<title-slug>-<6 hex>`, and the capture server writes the
   full note at `sessions/claudedesktop/<id>.md`. That is the path the daily
